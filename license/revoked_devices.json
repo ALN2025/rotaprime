@@ -1,3 +1,5 @@
 {
-  "revoked_device_ids": []
+  "revoked_device_ids": [],
+  "trial_used_device_ids": [],
+  "_comment": "revoked_device_ids: revoga PRO pago. trial_used_device_ids: trial jÃ¡ usado neste aparelho (anti-reinstalar). Apps Script ou manual."
 }
