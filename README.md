@@ -38,6 +38,27 @@
 
 > ⚠️ Use sempre o APK desta página oficial. Evite cópias repassadas sem verificação.
 
+### ⬇️ Link direto de download
+
+**https://github.com/ALN2025/rotaprime/releases/latest**
+
+---
+
+## 🔑 PRO — chave de ativação (destaque)
+
+> **No app: abra `Mais` → `Configurações`.**  
+> Lá você encontra o **ID do aparelho** (copie) e, mais abaixo, o botão verde **「Suporte」** (WhatsApp).
+
+**Para pedir a chave PRO:** toque em **Suporte**, envie uma mensagem pedindo a **chave de ativação** e **informe o ID do aparelho** que você copiou na mesma tela.
+
+**Depois de receber a chave:** em **Configurações → Assinatura**, toque na licença e **cole a chave** recebida (válida só para aquele ID).
+
+| Passo | Ação |
+|:-----:|------|
+| 1️⃣ | **Configurações** → copiar **ID do aparelho** |
+| 2️⃣ | **Suporte** (WhatsApp) → pedir chave PRO + **enviar o ID** |
+| 3️⃣ | **Assinatura** → colar a licença |
+
 ---
 
 ## 🧭 Como usar (resumo)
@@ -112,15 +133,6 @@ Tudo do Grátis, **mais**:
 | Gastos / lucro | ❌ | ✅ |
 
 Detalhes passo a passo: **[GUIA-USUARIO.md](GUIA-USUARIO.md)**
-
----
-
-## ⭐ Ativar o PRO
-
-1. Abra o app → **Mais** ou **Configurações**.  
-2. Copie o **ID do aparelho**.  
-3. Envie ao suporte / revenda autorizada para receber a **chave de licença**.  
-4. Cole a chave no app e confirme.
 
 ---
 
