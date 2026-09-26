@@ -29,6 +29,20 @@ void main() {
     expect(sameDeliveryLocation(a, b), isFalse);
   });
 
+  test('casas vizinhas com GPS parecido — não agrupa', () {
+    final a = Parada()
+      ..destinationAddress = 'Rua A, 41, Casa'
+      ..city = 'Nova Iguaçu/RJ'
+      ..latitude = -22.75
+      ..longitude = -43.45;
+    final b = Parada()
+      ..destinationAddress = 'Rua A, 43, Casa'
+      ..city = 'Nova Iguaçu/RJ'
+      ..latitude = -22.75001
+      ..longitude = -43.45001;
+    expect(sameDeliveryLocation(a, b), isFalse);
+  });
+
   test('mesmo AP — agrupa pacotes', () {
     final a = Parada()
       ..destinationAddress = 'Rua A, 100, Ap 501'

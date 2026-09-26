@@ -62,6 +62,30 @@ String extractDeliveryUnitSegment(String normalizedAddress) {
   return tags.join('+');
 }
 
+/// Prédio / condomínio → pins por AP no mesmo GPS. Casa → um pin por imóvel (GPS próprio).
+bool isMultiUnitBuildingSite(Parada p) {
+  final text = normalizeAddressToken(addressTextForParada(p));
+  if (extractDeliveryUnitSegment(text).isNotEmpty) return true;
+  const hints = [
+    'cond ',
+    'condominio',
+    ' condominio ',
+    ' ed ',
+    'edificio',
+    ' predio',
+    ' pre ',
+    ' bl ',
+    'bloco',
+    ' torre ',
+    ' conjunto ',
+    ' cj ',
+    ' residencial ',
+    ' galpao ',
+    ' shopping ',
+  ];
+  return hints.any(text.contains);
+}
+
 /// Remove nome do destinatário no início (planilha Shopee).
 String stripRecipientNamePrefix(String raw) {
   var s = raw.trim();

@@ -3,11 +3,8 @@ import 'package:rota_prime/utils/delivery_address_core.dart'
     show
         addressTextForParada,
         buildAddressCoreKey,
-        canonicalStreetLine,
         coordsWithinMeters,
-        extractDeliveryUnitSegment,
-        extractPrimaryStreetNumber,
-        extractStreetLine,
+        isMultiUnitBuildingSite,
         normalizeAddressToken;
 
 /// Chave do local de entrega (mesmo AP / mesma casa = mesma chave).
@@ -33,31 +30,18 @@ String deliveryAddressKey(Parada p) {
   return 'row:${p.id}_${p.ordemExibicao}';
 }
 
-/// Mesmo local de entrega: **mesmo logradouro + mesmo número** (não só a rua).
+/// Mesmo local: mesma chave de endereço. Casa não agrupa vizinho só por GPS.
 bool sameDeliveryLocation(Parada a, Parada b) {
   final ca = buildAddressCoreKey(a);
   final cb = buildAddressCoreKey(b);
   if (ca.isNotEmpty && cb.isNotEmpty) return ca == cb;
   if (deliveryAddressKey(a) == deliveryAddressKey(b)) return true;
 
-  final ta = normalizeAddressToken(addressTextForParada(a));
-  final tb = normalizeAddressToken(addressTextForParada(b));
-  final ua = extractDeliveryUnitSegment(ta);
-  final ub = extractDeliveryUnitSegment(tb);
-  if (ua.isNotEmpty && ub.isNotEmpty && ua != ub) return false;
-  if (ua.isNotEmpty || ub.isNotEmpty) {
-    return ua == ub && buildAddressCoreKey(a) == buildAddressCoreKey(b);
+  if (isMultiUnitBuildingSite(a) && isMultiUnitBuildingSite(b)) {
+    return coordsWithinMeters(a, b, 8) &&
+        buildAddressCoreKey(a) == buildAddressCoreKey(b);
   }
-
-  final na = extractPrimaryStreetNumber(ta);
-  final nb = extractPrimaryStreetNumber(tb);
-  if (na == null || nb == null || na != nb) return false;
-
-  final sa = canonicalStreetLine(extractStreetLine(ta));
-  final sb = canonicalStreetLine(extractStreetLine(tb));
-  if (sa.isEmpty || sb.isEmpty || sa != sb) return false;
-
-  return coordsWithinMeters(a, b, 12);
+  return false;
 }
 
 bool isBusinessDelivery(Parada p) {

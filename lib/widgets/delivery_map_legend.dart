@@ -25,7 +25,7 @@ const kDeliveryMapLegendEntries = [
     color: AppColors.stopPending,
     title: 'Pendente',
     description:
-        'Endereço pendente. Um pin por rua+número; se houver vários pacotes no mesmo local, o número no pin é a quantidade (ex.: 5). Detalhe na lista ou toque no pin.',
+        'Casa: um pin no endereço de cada imóvel. Condomínio/prédio: um pin por AP (vários no mapa em círculo). Vários pacotes no mesmo AP: número = quantidade. Toque no pin ou use a Lista.',
   ),
   MapLegendEntry(
     color: AppColors.orange,

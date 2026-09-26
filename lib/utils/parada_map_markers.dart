@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 import 'package:rota_prime/models/parada.dart';
+import 'package:rota_prime/utils/delivery_address_core.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 
 /// Agrupa pins no mapa por endereço + AP/bloco (mesmo local = um pin).
@@ -47,13 +48,15 @@ List<Parada> representativeParadasForMap(
   return out;
 }
 
-/// Vários APs no mesmo GPS (prédio) → pins em círculo, um por unidade.
+/// Prédio/condomínio: vários APs no mesmo GPS → pins em círculo. Casa: pin no GPS da casa.
 LatLng mapMarkerDisplayPoint(List<Parada> all, Parada p) {
   final lat = p.latitude!;
   final lng = p.longitude!;
+  if (!isMultiUnitBuildingSite(p)) return LatLng(lat, lng);
   const eps = 0.000018;
   final keyOrder = <String>[];
   for (final x in all) {
+    if (!isMultiUnitBuildingSite(x)) continue;
     if (x.latitude == null || x.longitude == null) continue;
     if ((x.latitude! - lat).abs() > eps || (x.longitude! - lng).abs() > eps) {
       continue;
