@@ -177,8 +177,10 @@ class _ControleGastosScreenState extends ConsumerState<ControleGastosScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Informe o odômetro no início, o valor que você recebe pela rota e '
-            'registre cada gasto durante o dia. No fim, use KM final para o lucro real.',
+            'Lucro real = valor da rota − gastos que você lançou. '
+            'KM rodado = odômetro final − inicial (não importa km/l da moto ou carro). '
+            'Abastecimento entra como gasto em Combustível — o gráfico usa valores reais, '
+            'não estimativa de consumo.',
             style: TextStyle(color: Colors.white70, height: 1.4, fontSize: 13),
           ),
           const SizedBox(height: 16),

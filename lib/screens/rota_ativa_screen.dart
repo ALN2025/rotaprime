@@ -449,8 +449,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     }
     final st = ref.read(rotaProvider);
     await ref.read(rotaProvider.notifier).confirmRoute();
-    MapTilePrefetch.prefetchAllBasemapsForRoute(
+    final basemap = ref.read(mapSettingsProvider).basemap;
+    MapTilePrefetch.prefetchUserBasemapForRoute(
       paradas: st.paradas,
+      basemap: basemap,
       onProgress: (msg) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1007,7 +1009,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     final multiStopsOnMap = paradas.length > 1;
     final pinRouteFocus = _manualTargetLock && _selectedParadaId != null;
     final showFullOptimizedPolyline =
-        showFullRouteTrace && !routeActive && !pinRouteFocus;
+        showFullRouteTrace && !pinRouteFocus;
     final showNavLegPolyline =
         isPro && (routeActive || pinRouteFocus);
 
@@ -1168,7 +1170,8 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
                   ? _liveDriverHeading
                   : state.driverHeading,
               navigationView: _drivingMode,
-              legRouteOnly: true,
+              legRouteOnly: showNavLegPolyline &&
+                  !(showFullOptimizedPolyline && state.routePoints.length >= 2),
               mapRotationDegrees: 0,
               selectedParadaId: _manualTargetLock
                   ? (_selectedParadaId ?? current?.id)

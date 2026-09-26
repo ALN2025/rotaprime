@@ -1,5 +1,13 @@
 import 'package:rota_prime/models/parada.dart';
-import 'package:rota_prime/utils/delivery_address_core.dart';
+import 'package:rota_prime/utils/delivery_address_core.dart'
+    show
+        addressTextForParada,
+        buildAddressCoreKey,
+        canonicalStreetLine,
+        coordsWithinMeters,
+        extractPrimaryStreetNumber,
+        extractStreetLine,
+        normalizeAddressToken;
 
 /// Chave do local de entrega (mesmo AP / mesma casa = mesma chave).
 String deliveryAddressKey(Parada p) {
@@ -24,17 +32,25 @@ String deliveryAddressKey(Parada p) {
   return 'row:${p.id}_${p.ordemExibicao}';
 }
 
+/// Mesmo local de entrega: **mesmo logradouro + mesmo número** (não só a rua).
 bool sameDeliveryLocation(Parada a, Parada b) {
+  final ca = buildAddressCoreKey(a);
+  final cb = buildAddressCoreKey(b);
+  if (ca.isNotEmpty && cb.isNotEmpty && ca == cb) return true;
   if (deliveryAddressKey(a) == deliveryAddressKey(b)) return true;
-  if (addressCoresSimilar(a, b)) return true;
-  if (coordsWithinMeters(a, b, 28)) {
-    final sa = extractStreetLine(normalizeAddressToken(addressTextForParada(a)));
-    final sb = extractStreetLine(normalizeAddressToken(addressTextForParada(b)));
-    final na = extractPrimaryStreetNumber(normalizeAddressToken(addressTextForParada(a)));
-    final nb = extractPrimaryStreetNumber(normalizeAddressToken(addressTextForParada(b)));
-    if (sa != null && sa == sb && na != null && na == nb) return true;
-  }
-  return false;
+
+  final ta = normalizeAddressToken(addressTextForParada(a));
+  final tb = normalizeAddressToken(addressTextForParada(b));
+  final na = extractPrimaryStreetNumber(ta);
+  final nb = extractPrimaryStreetNumber(tb);
+  if (na == null || nb == null || na != nb) return false;
+
+  final sa = canonicalStreetLine(extractStreetLine(ta));
+  final sb = canonicalStreetLine(extractStreetLine(tb));
+  if (sa.isEmpty || sb.isEmpty || sa != sb) return false;
+
+  // Mesmo nº na mesma rua — só agrupa se GPS confirma (prédio / vizinhos colados).
+  return coordsWithinMeters(a, b, 14);
 }
 
 bool isBusinessDelivery(Parada p) {

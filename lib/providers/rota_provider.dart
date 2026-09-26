@@ -450,16 +450,40 @@ class RotaNotifier extends StateNotifier<RotaState> {
         .findAll();
     final items = <HistoricoItem>[];
     for (final r in rotas) {
-      final count = await isar.paradas.filter().rotaIdEqualTo(r.id).count();
+      final paradas = await isar.paradas.filter().rotaIdEqualTo(r.id).findAll();
+      final gastos = await isar.gastos.filter().rotaIdEqualTo(r.id).findAll();
+      final gastoTotal = gastos.fold(0.0, (s, g) => s + g.valor);
+      final entregues = paradas.where((p) => p.entregue).length;
+      final kmF = r.kmFinal;
+      var kmRodado = kmF != null ? kmF - r.kmInicial : 0.0;
+      if (kmRodado < 0) kmRodado = 0;
       items.add(HistoricoItem(
         id: r.id,
         titulo: r.titulo,
-        paradasCount: count,
+        paradasCount: paradas.length,
         criadaEm: r.criadaEm,
         finalizadaEm: r.finalizadaEm,
+        valorPago: r.valorPago,
+        gastoTotal: gastoTotal,
+        kmInicial: r.kmInicial,
+        kmFinal: kmF,
+        kmRodado: kmRodado,
+        lucroLiquido: r.valorPago - gastoTotal,
+        entregues: entregues,
       ));
     }
     return items;
+  }
+
+  Future<List<Gasto>> loadGastosForRotaIds(Iterable<int> rotaIds) async {
+    final ids = rotaIds.toSet();
+    if (ids.isEmpty) return [];
+    final isar = await IsarService.instance;
+    final out = <Gasto>[];
+    for (final id in ids) {
+      out.addAll(await isar.gastos.filter().rotaIdEqualTo(id).findAll());
+    }
+    return out;
   }
 
   Future<void> refreshDriverLocation() async {

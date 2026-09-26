@@ -599,6 +599,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
             Positioned.fill(
               child: RouteMap(
                 paradas: paradas,
+                fastTileLayer: true,
                 routePoints: showOsrmRoute ? state.routePoints : const [],
                 allowRoutePolylines: showOsrmRoute,
                 driverPosition: state.driverPosition,
@@ -1010,8 +1011,11 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                 onStart: () async {
                                   final st = ref.read(rotaProvider);
                                   await ref.read(rotaProvider.notifier).confirmRoute();
-                                  MapTilePrefetch.prefetchAllBasemapsForRoute(
+                                  final basemap =
+                                      ref.read(mapSettingsProvider).basemap;
+                                  MapTilePrefetch.prefetchUserBasemapForRoute(
                                     paradas: st.paradas,
+                                    basemap: basemap,
                                     onProgress: (msg) {
                                       if (!context.mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(

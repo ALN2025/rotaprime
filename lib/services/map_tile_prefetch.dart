@@ -44,6 +44,24 @@ class MapTilePrefetch {
     onProgress?.call('Mapas da rota salvos para uso offline');
   }
 
+  /// Apenas o estilo escolhido em Configurações — menos rede, disco e RAM.
+  static Future<void> prefetchUserBasemapForRoute({
+    required List<Parada> paradas,
+    required MapBasemap basemap,
+    int minZoom = 14,
+    int maxZoom = 16,
+    void Function(String message)? onProgress,
+  }) async {
+    onProgress?.call('Mapa offline (${basemap.label})…');
+    await prefetchForRoute(
+      paradas: paradas,
+      basemap: basemap,
+      minZoom: minZoom,
+      maxZoom: maxZoom,
+    );
+    onProgress?.call('Mapa da rota salvo para uso offline');
+  }
+
   static Future<void> prefetchForRoute({
     required List<Parada> paradas,
     MapBasemap basemap = MapBasemap.streets,

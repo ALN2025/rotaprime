@@ -17,6 +17,9 @@ import 'package:rota_prime/screens/bootstrap_screen.dart';
 Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
+  final imageCache = PaintingBinding.instance.imageCache;
+  imageCache.maximumSize = 80;
+  imageCache.maximumSizeBytes = 48 << 20;
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

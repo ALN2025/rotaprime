@@ -5,20 +5,11 @@ import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 
-/// Agrupa pins no mapa por coordenada ou endereço.
-String mapPinGroupKey(Parada p) {
-  if (p.latitude != null && p.longitude != null) {
-    final lat = p.latitude!.toStringAsFixed(4);
-    final lng = p.longitude!.toStringAsFixed(4);
-    return 'geo:$lat,$lng';
-  }
-  return deliveryAddressKey(p);
-}
+/// Agrupa pins no mapa por endereço (número + rua), não só GPS arredondado.
+String mapPinGroupKey(Parada p) => deliveryAddressKey(p);
 
-bool sameMapPinGroup(Parada a, Parada b) {
-  if (mapPinGroupKey(a) == mapPinGroupKey(b)) return true;
-  return sameDeliveryLocation(a, b);
-}
+bool sameMapPinGroup(Parada a, Parada b) =>
+    mapPinGroupKey(a) == mapPinGroupKey(b) || sameDeliveryLocation(a, b);
 
 List<Parada> rowsInMapPinGroup(List<Parada> all, Parada anchor) {
   final key = mapPinGroupKey(anchor);
@@ -76,7 +67,8 @@ LatLng mapMarkerDisplayPoint(List<Parada> all, Parada p) {
           x.latitude != null &&
           x.longitude != null &&
           (x.latitude! - lat).abs() < eps &&
-          (x.longitude! - lng).abs() < eps)
+          (x.longitude! - lng).abs() < eps &&
+          sameMapPinGroup(x, p))
       .toList()
     ..sort((a, b) => a.ordemExibicao.compareTo(b.ordemExibicao));
   if (peers.length <= 1) return LatLng(lat, lng);

@@ -70,9 +70,7 @@ class ParadaLabels {
 
   static List<Parada> _rowsAtSameStop(List<Parada> all, Parada p) {
     final key = deliveryAddressKey(p);
-    return all
-        .where((x) => deliveryAddressKey(x) == key || sameDeliveryLocation(x, p))
-        .toList();
+    return all.where((x) => sameDeliveryLocation(x, p) || deliveryAddressKey(x) == key).toList();
   }
 
   static List<String> pendingPackageOrderLabelsAtStop(List<Parada> all, Parada p) {

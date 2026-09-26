@@ -67,7 +67,7 @@ class MaisTabScreen extends ConsumerWidget {
               context,
               icon: Icons.history,
               title: 'Histórico de rotas',
-              subtitle: 'Rotas finalizadas',
+              subtitle: 'Busca por dia, extrato e relatório mensal',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const HistoricoScreen()),
               ),

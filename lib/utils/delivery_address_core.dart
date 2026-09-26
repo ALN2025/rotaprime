@@ -89,6 +89,20 @@ String? extractPrimaryStreetNumber(String normalizedAddress) {
   return null;
 }
 
+/// "r dos torneadores" e "rua dos torneadores" → mesma chave de logradouro.
+String canonicalStreetLine(String? street) {
+  if (street == null || street.isEmpty) return '';
+  var s = street.trim();
+  if (RegExp(r'^r\s+').hasMatch(s) && !s.startsWith('rua ')) {
+    s = 'rua ${s.substring(2).trim()}';
+  } else if (RegExp(r'^av\s+').hasMatch(s) && !s.startsWith('avenida ')) {
+    s = 'avenida ${s.substring(3).trim()}';
+  } else if (RegExp(r'^tv\s+').hasMatch(s) && !s.startsWith('travessa ')) {
+    s = 'travessa ${s.substring(3).trim()}';
+  }
+  return s;
+}
+
 String? extractStreetLine(String normalizedAddress) {
   final s = normalizedAddress;
   if (s.isEmpty) return null;
@@ -135,7 +149,7 @@ String buildAddressCoreKey(Parada p) {
   final bairro = normalizeAddressToken(p.bairro);
 
   if (street != null && number != null) {
-    final parts = <String>[street, 'n$number'];
+    final parts = <String>[canonicalStreetLine(street), 'n$number'];
     if (zip.length >= 8) parts.add('cep$zip');
     if (city.isNotEmpty) {
       parts.add(city);
@@ -237,19 +251,5 @@ bool coordsWithinMeters(Parada a, Parada b, double meters) {
 bool addressCoresSimilar(Parada a, Parada b) {
   final ca = buildAddressCoreKey(a);
   final cb = buildAddressCoreKey(b);
-  if (ca.isNotEmpty && ca == cb) return true;
-
-  if (a.stop > 0 && a.stop == b.stop) {
-    final cityA = normalizeAddressToken(a.city);
-    final cityB = normalizeAddressToken(b.city);
-    final zipA = _digitsOnly(a.zipcode);
-    final zipB = _digitsOnly(b.zipcode);
-    if (cityA.isNotEmpty &&
-        cityA == cityB &&
-        zipA.length >= 8 &&
-        zipA == zipB) {
-      return true;
-    }
-  }
-  return false;
+  return ca.isNotEmpty && ca == cb;
 }

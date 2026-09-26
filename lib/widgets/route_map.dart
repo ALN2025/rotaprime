@@ -225,17 +225,27 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
 
   List<Widget> _routePolylines() {
     if (!widget.allowRoutePolylines) return const [];
-    final List<LatLng> points;
-    if (widget.legRouteOnly || widget.navigationView) {
-      final leg = widget.navigationLegPoints;
-      if (leg == null || leg.length < 2) return const [];
-      points = leg;
-    } else {
-      if (widget.routePoints.length < 2) return const [];
-      points = widget.routePoints;
+
+    final leg = widget.navigationLegPoints;
+    final hasLeg = leg != null && leg.length >= 2;
+    final hasFull = widget.routePoints.length >= 2;
+
+    if (hasFull && !widget.legRouteOnly && !widget.navigationView) {
+      return _fullRoutePolylineLayers(widget.routePoints, stroke: 4.0);
     }
 
-    final legOnly = widget.legRouteOnly;
+    final List<LatLng> points;
+    if ((widget.legRouteOnly || widget.navigationView) && hasLeg) {
+      points = leg;
+    } else if (hasFull) {
+      points = widget.routePoints;
+    } else if (hasLeg) {
+      points = leg;
+    } else {
+      return const [];
+    }
+
+    final legOnly = widget.legRouteOnly || (widget.navigationView && hasLeg);
     if (legOnly) {
       final band = _circuitStreetStroke(_mapZoom);
       return [
@@ -264,7 +274,10 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
       ];
     }
 
-    final stroke = widget.navigationView ? 5.0 : 4.0;
+    return _fullRoutePolylineLayers(points, stroke: widget.navigationView ? 5.0 : 4.0);
+  }
+
+  List<Widget> _fullRoutePolylineLayers(List<LatLng> points, {required double stroke}) {
     return [
       PolylineLayer(
         polylines: [
@@ -294,7 +307,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   MapBasemap get _effectiveBasemap => widget.basemap;
 
   List<Widget> _basemapTileLayers(MapBasemap basemap) {
-    final pan = widget.fastTileLayer ? 1 : 2;
+    final pan = widget.fastTileLayer ? 0 : 2;
     final layers = <Widget>[
       _mapTileLayer(
         basemap: basemap,
