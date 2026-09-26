@@ -70,7 +70,7 @@ class ParadaLabels {
 
   static List<Parada> _rowsAtSameStop(List<Parada> all, Parada p) {
     final key = deliveryAddressKey(p);
-    return all.where((x) => sameDeliveryLocation(x, p) || deliveryAddressKey(x) == key).toList();
+    return all.where((x) => deliveryAddressKey(x) == key).toList();
   }
 
   static List<String> pendingPackageOrderLabelsAtStop(List<Parada> all, Parada p) {
@@ -134,6 +134,22 @@ class ParadaLabels {
     final only = carriers.single;
     return only != RomaneioCarrier.shopee &&
         only != RomaneioCarrier.generico;
+  }
+
+  /// Texto no círculo do pin — vários pacotes no mesmo AP/endereço = quantidade.
+  static String mapPinDisplayLabel(List<Parada> all, Parada p) {
+    final count = packageCountAtStop(all, p);
+    if (count > 1) return '$count';
+    return mapPinLabel(all, p);
+  }
+
+  /// Pacotes pendentes no pin (ordens) — painel ao tocar.
+  static String mapPinPackageOrdersLine(List<Parada> all, Parada p) {
+    final labels = pendingPackageOrderLabelsAtStop(all, p);
+    if (labels.isEmpty) {
+      return packageOrderLabelsAtStop(all, p).join(', ');
+    }
+    return labels.join(', ');
   }
 
   /// Pin no mapa: Shopee pura = ordem do pacote; mista / privadas = ordem na rota (1…N).

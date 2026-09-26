@@ -24,7 +24,8 @@ const kDeliveryMapLegendEntries = [
   MapLegendEntry(
     color: AppColors.stopPending,
     title: 'Pendente',
-    description: 'Parada ainda não visitada. O pin aparece no mapa na ordem da rota.',
+    description:
+        'Endereço pendente. Um pin por rua+número; se houver vários pacotes no mesmo local, o número no pin é a quantidade (ex.: 5). Detalhe na lista ou toque no pin.',
   ),
   MapLegendEntry(
     color: AppColors.orange,

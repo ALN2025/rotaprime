@@ -49,7 +49,7 @@ class StopRouteAddressPeek {
   }) {
     final nextLabel = next != null ? ParadaLabels.mapPinLabel(all, next) : null;
     return StopRouteAddressPeek(
-      currentPinLabel: ParadaLabels.mapPinLabel(all, current),
+      currentPinLabel: ParadaLabels.mapPinDisplayLabel(all, current),
       currentAddress: current.destinationAddress.trim().isNotEmpty
           ? current.destinationAddress.trim()
           : current.rawLine.trim(),

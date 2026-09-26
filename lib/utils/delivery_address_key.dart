@@ -5,6 +5,7 @@ import 'package:rota_prime/utils/delivery_address_core.dart'
         buildAddressCoreKey,
         canonicalStreetLine,
         coordsWithinMeters,
+        extractDeliveryUnitSegment,
         extractPrimaryStreetNumber,
         extractStreetLine,
         normalizeAddressToken;
@@ -36,11 +37,18 @@ String deliveryAddressKey(Parada p) {
 bool sameDeliveryLocation(Parada a, Parada b) {
   final ca = buildAddressCoreKey(a);
   final cb = buildAddressCoreKey(b);
-  if (ca.isNotEmpty && cb.isNotEmpty && ca == cb) return true;
+  if (ca.isNotEmpty && cb.isNotEmpty) return ca == cb;
   if (deliveryAddressKey(a) == deliveryAddressKey(b)) return true;
 
   final ta = normalizeAddressToken(addressTextForParada(a));
   final tb = normalizeAddressToken(addressTextForParada(b));
+  final ua = extractDeliveryUnitSegment(ta);
+  final ub = extractDeliveryUnitSegment(tb);
+  if (ua.isNotEmpty && ub.isNotEmpty && ua != ub) return false;
+  if (ua.isNotEmpty || ub.isNotEmpty) {
+    return ua == ub && buildAddressCoreKey(a) == buildAddressCoreKey(b);
+  }
+
   final na = extractPrimaryStreetNumber(ta);
   final nb = extractPrimaryStreetNumber(tb);
   if (na == null || nb == null || na != nb) return false;
@@ -49,8 +57,7 @@ bool sameDeliveryLocation(Parada a, Parada b) {
   final sb = canonicalStreetLine(extractStreetLine(tb));
   if (sa.isEmpty || sb.isEmpty || sa != sb) return false;
 
-  // Mesmo nº na mesma rua — só agrupa se GPS confirma (prédio / vizinhos colados).
-  return coordsWithinMeters(a, b, 14);
+  return coordsWithinMeters(a, b, 12);
 }
 
 bool isBusinessDelivery(Parada p) {

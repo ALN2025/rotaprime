@@ -608,7 +608,7 @@ class _StopPin extends StatelessWidget {
       alignment: Alignment.center,
       child: showOrderNumber
           ? Text(
-              ParadaLabels.mapPinLabel(allParadas, parada),
+              ParadaLabels.mapPinDisplayLabel(allParadas, parada),
               style: TextStyle(
                 color: ParadaLabels.isLateAddedPackage(parada) ? Colors.amber : Colors.white,
                 fontWeight: FontWeight.bold,

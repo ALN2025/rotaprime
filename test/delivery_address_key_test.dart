@@ -14,17 +14,35 @@ void main() {
     expect(deliveryAddressKey(a), isNot(deliveryAddressKey(b)));
   });
 
-  test('mesma rua e mesmo número — agrupa', () {
+  test('mesmo número, APs diferentes — pins separados', () {
     final a = Parada()
-      ..destinationAddress = 'Rua A, 41, Ap 2'
+      ..destinationAddress = 'Rua A, 100, Ap 501'
       ..city = 'Nova Iguaçu/RJ'
       ..latitude = -22.75
       ..longitude = -43.45;
     final b = Parada()
-      ..destinationAddress = 'Rua A, 41, Casa'
+      ..destinationAddress = 'Rua A, 100, Ap 502'
       ..city = 'Nova Iguaçu/RJ'
       ..latitude = -22.75
       ..longitude = -43.45;
+    expect(deliveryAddressKey(a), isNot(deliveryAddressKey(b)));
+    expect(sameDeliveryLocation(a, b), isFalse);
+  });
+
+  test('mesmo AP — agrupa pacotes', () {
+    final a = Parada()
+      ..destinationAddress = 'Rua A, 100, Ap 501'
+      ..city = 'Nova Iguaçu/RJ'
+      ..latitude = -22.75
+      ..longitude = -43.45
+      ..ordemExibicao = 1;
+    final b = Parada()
+      ..destinationAddress = 'Rua A, 100, Apto 501'
+      ..city = 'Nova Iguaçu/RJ'
+      ..latitude = -22.75
+      ..longitude = -43.45
+      ..ordemExibicao = 2;
+    expect(deliveryAddressKey(a), deliveryAddressKey(b));
     expect(sameDeliveryLocation(a, b), isTrue);
   });
 }

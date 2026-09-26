@@ -30,7 +30,36 @@ String normalizeAddressToken(String input) {
   s = s.replaceAll(RegExp(r'\bnum\b'), 'n');
   s = s.replaceAll(RegExp(r'\bapto\.?\b'), 'ap ');
   s = s.replaceAll(RegExp(r'\bapartamento\b'), 'ap ');
+  s = s.replaceAll(RegExp(r'\bbloco\b'), 'bl ');
+  s = s.replaceAll(RegExp(r'\bconjunto\b'), 'cj ');
   return s.trim();
+}
+
+/// AP, bloco, sala, conjunto… — separa pins no mesmo prédio (GPS igual).
+String extractDeliveryUnitSegment(String normalizedAddress) {
+  final s = normalizedAddress;
+  if (s.isEmpty) return '';
+  final tags = <String>[];
+
+  void capture(String prefix, RegExp re) {
+    for (final m in re.allMatches(s)) {
+      final v = m.group(1)?.trim();
+      if (v != null && v.isNotEmpty) tags.add('$prefix$v');
+    }
+  }
+
+  capture('ap', RegExp(r'\bap\s*([\w\-/]+)'));
+  capture('bl', RegExp(r'\bbl\s*([\w\-/]+)'));
+  capture('sl', RegExp(r'\bsala\s*([\w\-/]+)'));
+  capture('cj', RegExp(r'\bcj\s*([\w\-/]+)'));
+  capture('tr', RegExp(r'\btorre\s*([\w\-/]+)'));
+  capture('an', RegExp(r'\bandar\s*([\w\-/]+)'));
+  capture('lt', RegExp(r'\blote\s*([\w\-/]+)'));
+  capture('qd', RegExp(r'\bquadra\s*([\w\-/]+)'));
+
+  if (tags.isEmpty) return '';
+  tags.sort();
+  return tags.join('+');
 }
 
 /// Remove nome do destinatário no início (planilha Shopee).
@@ -139,17 +168,19 @@ String addressTextForParada(Parada p) {
   return stripRecipientNamePrefix(text);
 }
 
-/// Chave estável: logradouro + número + CEP + cidade (complemento e nome não separam).
+/// Chave estável: logradouro + número + unidade (AP/bloco) + CEP + cidade.
 String buildAddressCoreKey(Parada p) {
   final text = normalizeAddressToken(addressTextForParada(p));
   final street = extractStreetLine(text);
   final number = extractPrimaryStreetNumber(text);
+  final unit = extractDeliveryUnitSegment(text);
   final zip = _digitsOnly(p.zipcode);
   final city = normalizeAddressToken(p.city);
   final bairro = normalizeAddressToken(p.bairro);
 
   if (street != null && number != null) {
     final parts = <String>[canonicalStreetLine(street), 'n$number'];
+    if (unit.isNotEmpty) parts.add(unit);
     if (zip.length >= 8) parts.add('cep$zip');
     if (city.isNotEmpty) {
       parts.add(city);
@@ -160,7 +191,8 @@ String buildAddressCoreKey(Parada p) {
   }
 
   if (text.isNotEmpty) {
-    final compact = text.split(',').take(2).join(',').trim();
+    var compact = text.split(',').take(3).join(',').trim();
+    if (unit.isNotEmpty && !compact.contains(unit)) compact = '$compact|$unit';
     if (zip.length >= 8) return '$compact|cep$zip';
     if (city.isNotEmpty) return '$compact|$city';
     return compact;

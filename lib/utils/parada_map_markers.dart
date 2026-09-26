@@ -3,13 +3,12 @@ import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
 import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
-import 'package:rota_prime/utils/parada_labels.dart';
 
-/// Agrupa pins no mapa por endereço (número + rua), não só GPS arredondado.
+/// Agrupa pins no mapa por endereço + AP/bloco (mesmo local = um pin).
 String mapPinGroupKey(Parada p) => deliveryAddressKey(p);
 
 bool sameMapPinGroup(Parada a, Parada b) =>
-    mapPinGroupKey(a) == mapPinGroupKey(b) || sameDeliveryLocation(a, b);
+    mapPinGroupKey(a) == mapPinGroupKey(b);
 
 List<Parada> rowsInMapPinGroup(List<Parada> all, Parada anchor) {
   final key = mapPinGroupKey(anchor);
@@ -19,31 +18,12 @@ List<Parada> rowsInMapPinGroup(List<Parada> all, Parada anchor) {
 List<Parada> _rowsInMapPinGroup(List<Parada> all, Parada anchor) =>
     rowsInMapPinGroup(all, anchor);
 
-/// Acima disso, agrupa por endereço no mapa (115 pins travam o celular).
-const kMapMaxIndividualPins = 28;
-
+/// Um pin por endereço/unidade; vários pacotes no mesmo AP compartilham o pin.
 List<Parada> representativeParadasForMap(
   List<Parada> all, {
   required bool hideCompleted,
-  int maxIndividualPins = kMapMaxIndividualPins,
 }) {
   final withCoords = all.where((p) => p.latitude != null && p.longitude != null);
-  final pendingCount = hideCompleted
-      ? withCoords.where((p) => !p.entregue && !p.falha).length
-      : withCoords.length;
-  final onePinPerPackage = pendingCount <= maxIndividualPins &&
-      ParadaLabels.routeUsesUnifiedPinOrder(all);
-
-  if (onePinPerPackage) {
-    final out = <Parada>[];
-    for (final p in withCoords) {
-      if (hideCompleted && (p.entregue || p.falha)) continue;
-      out.add(p);
-    }
-    out.sort((a, b) => a.ordemExibicao.compareTo(b.ordemExibicao));
-    return out;
-  }
-
   final map = <String, Parada>{};
   for (final p in withCoords) {
     if (hideCompleted && (p.entregue || p.falha)) continue;
@@ -62,28 +42,32 @@ List<Parada> representativeParadasForMap(
       map[key] = p;
     }
   }
-  return map.values.toList();
+  final out = map.values.toList()
+    ..sort((a, b) => a.ordemExibicao.compareTo(b.ordemExibicao));
+  return out;
 }
 
-/// Mesmo endereço GPS → desloca pins para ver cada pacote (Magalog/Loggi 1…N).
+/// Vários APs no mesmo GPS (prédio) → pins em círculo, um por unidade.
 LatLng mapMarkerDisplayPoint(List<Parada> all, Parada p) {
   final lat = p.latitude!;
   final lng = p.longitude!;
-  const eps = 0.00001;
-  final peers = all
-      .where((x) =>
-          x.latitude != null &&
-          x.longitude != null &&
-          (x.latitude! - lat).abs() < eps &&
-          (x.longitude! - lng).abs() < eps &&
-          sameMapPinGroup(x, p))
-      .toList()
-    ..sort((a, b) => a.ordemExibicao.compareTo(b.ordemExibicao));
-  if (peers.length <= 1) return LatLng(lat, lng);
-  final i = peers.indexWhere((x) => x.id == p.id);
-  final idx = i >= 0 ? i : 0;
-  const radiusM = 22.0;
-  final angle = (idx / peers.length) * 2 * math.pi;
+  const eps = 0.000018;
+  final keyOrder = <String>[];
+  for (final x in all) {
+    if (x.latitude == null || x.longitude == null) continue;
+    if ((x.latitude! - lat).abs() > eps || (x.longitude! - lng).abs() > eps) {
+      continue;
+    }
+    final k = mapPinGroupKey(x);
+    if (!keyOrder.contains(k)) keyOrder.add(k);
+  }
+  keyOrder.sort();
+  if (keyOrder.length <= 1) return LatLng(lat, lng);
+  final myKey = mapPinGroupKey(p);
+  final idx = keyOrder.indexOf(myKey);
+  if (idx < 0) return LatLng(lat, lng);
+  const radiusM = 26.0;
+  final angle = (idx / keyOrder.length) * 2 * math.pi;
   final dLat = radiusM * math.cos(angle) / 111320.0;
   final dLng = radiusM * math.sin(angle) / (111320.0 * math.cos(lat * math.pi / 180));
   return LatLng(lat + dLat, lng + dLng);

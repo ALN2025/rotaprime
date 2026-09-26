@@ -685,7 +685,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
               child: RouteMap(
                 paradas: mapParadas,
                 fastTileLayer: paradas.length > 20,
-                lightweightMarkers: paradas.length > 28,
+                lightweightMarkers: paradas.length > 55,
                 routePoints: showFullOptimizedRoute ? routePoints : const [],
                 navigationLegPoints: showLegToTarget ? leg : const [],
                 legRouteOnly: showLegToTarget,
