@@ -1,0 +1,65 @@
+ROTA PRIME - APK OFICIAL (UNICO)
+
+================================
+
+
+
+Arquivo oficial:
+
+  ROTA_PRIME.apk
+
+  (~26 MB = 1 APK para TODOS os celulares: ARM 32 + 64 bits; veja bytes em ROTA_PRIME.CONFIRA.txt)
+
+
+
+Onde fica depois de compilar:
+
+  pasta do projeto\release\ROTA_PRIME.apk
+
+  (copia tambem na Area de trabalho)
+
+
+
+Se der "erro ao analisar pacote" (Motorola / Android 14+):
+
+  1. Desinstale o ROTA PRIME antigo
+  2. Baixe de novo pelo Chrome (link GitHub) — arquivo ~78 MB
+  3. Instale pelo app Arquivos (Downloads), NAO dentro do WhatsApp
+  4. Tamanho no celular deve bater com release\ROTA_PRIME.CONFIRA.txt (bytes)
+
+Builds antigos de ~37 MB so eram teste — nao use.
+
+
+
+COMPILAR
+
+1. Duplo clique: COMPILAR.APK.bat
+
+2. Aguarde terminar (5-15 min na primeira vez)
+
+
+
+INSTALAR (USB — recomendado)
+
+1. INSTALAR-USB.bat (depuracao USB ligada)
+
+   OU copie release\ROTA_PRIME.apk para o celular (pasta Download)
+
+2. Desinstale versao antiga do app, se houver
+
+3. Toque no ROTA_PRIME.apk -> Instalar
+
+
+
+Telegram / WhatsApp
+
+- Envie release\ROTA_PRIME.apk (mensagem nova)
+
+- Instale pelo app Arquivos, nao dentro do chat
+
+
+
+Problema no Gradle?
+
+- REPARAR-GRADLE.bat e depois COMPILAR.APK.bat de novo
+

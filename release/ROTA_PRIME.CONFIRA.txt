@@ -1,0 +1,6 @@
+﻿ROTA PRIME - conferencia do APK (celular (distribuir))
+Arquivo: C:\Users\User\Desktop\ROTA PRIME\release\ROTA_PRIME.apk
+Tamanho EXATO em bytes: 33703470
+SHA256: 380A033B44110A933CDDF7F6CBFD96016DE0A005C9DE0275EECFA6B4A3C6C6D9
+CPUs: arm64-v8a, armeabi-v7a
+No celular o tamanho deve ser IGUAL. Se for menor, baixe de novo ou use cabo USB.

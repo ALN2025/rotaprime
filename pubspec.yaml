@@ -1,0 +1,64 @@
+name: rota_prime
+description: ROTA PRIME - otimização de rotas de entrega
+publish_to: 'none'
+version: 1.2.0+30
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.6.1
+  isar_community: ^3.3.2
+  isar_community_flutter_libs: ^3.3.2
+  path_provider: ^2.1.5
+  file_picker: ^8.1.7
+  excel: ^4.0.6
+  http: ^1.2.2
+  mobile_scanner: ^6.0.2
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  url_launcher: ^6.3.1
+  fl_chart: ^0.69.2
+  intl: ^0.20.1
+  uuid: ^4.5.1
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+  google_sign_in: ^6.2.2
+  shared_preferences: ^2.3.3
+  flutter_slidable: ^4.0.3
+  device_info_plus: ^12.4.0
+  cryptography: ^2.9.0
+  crypto: ^3.0.7
+  speech_to_text: ^7.5.0
+  wakelock_plus: ^1.3.2
+  screen_brightness: ^2.1.2
+  pdfrx: ^2.4.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.13
+  isar_community_generator: ^3.3.2
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/LOGO.png
+  adaptive_icon_background: "#FF6B00"
+  adaptive_icon_foreground: assets/LOGO.png
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/LOGO.png
+    - assets/carriers/
+    - assets/carriers/shopee.png
+    - assets/carriers/magalog.png
+    - assets/carriers/loggi.png

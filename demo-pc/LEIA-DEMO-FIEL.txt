@@ -1,0 +1,38 @@
+ROTA PRIME — DEMO FIEL AO APK (para vídeo)
+==========================================
+
+O simulador HTML (INICIAR-DEMO.bat) NÃO é o app real — só um rascunho.
+
+Para gravar o MESMO app do celular no PC:
+
+1. Compile o APK (se ainda não tiver):
+   COMPILAR.APK.bat  →  release\ROTA_PRIME_EMULADOR.apk (emulador)
+
+2. Duplo clique:
+   INICIAR-DEMO-FIEL.bat
+   (ou na raiz: DEMO-VIDEO-FIEL.bat)
+
+3. O script:
+   - Liga o emulador Android (padrão: O_ATIVADOR)
+   - Instala release\ROTA_PRIME_EMULADOR.apk
+   - Abre o ROTA PRIME
+   - Se tiver scrcpy, espelha a tela numa janela limpa para OBS
+
+4. Grave com OBS:
+   - Capture a janela "ROTA PRIME APK" (scrcpy) ou o emulador
+   - Resolução vertical 9:16 fica natural
+
+Emulador alternativo:
+   Edite demo-pc\emulator.config → AVD=TOME_LIDER
+
+Licença PRO na demonstração (emulador):
+   - No app: Configurações → ID do aparelho → Copiar
+   - No PC: GERAR-LICENCA.bat com esse ID
+   - Cole a licença no app (não use a licença "demo7a9f..." — ela é só do HTML antigo)
+
+Celular USB (também 100% fiel):
+   INSTALAR-USB.bat + cabo + scrcpy no PC
+
+Por que não roda no navegador?
+   O app usa o mesmo código do APK com banco Isar (Android).
+   Web/ Electron fake não substituem o APK.

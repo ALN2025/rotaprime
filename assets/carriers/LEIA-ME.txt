@@ -1,0 +1,7 @@
+Coloque aqui os logos (PNG fundo transparente recomendado):
+
+  shopee.png   — planilha Shopee / SPX
+  magalog.png  — Protocolo de Carregamento
+  loggi.png    — Relatório de Controle de Pacotes
+
+Nomes exatos em minúsculas. Altura sugerida: 64–128 px.

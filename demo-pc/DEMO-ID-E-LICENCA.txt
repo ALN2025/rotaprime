@@ -1,0 +1,26 @@
+ROTA PRIME — DEMO PARA VÍDEO (PC)
+=================================
+
+Use no simulador Electron (demo-pc) ou grave a ativação PRO na tela Licença.
+
+ID DO APARELHO (simulador):
+  demo7a9f3e2b1c84d56e78f90ab
+
+Referência: ALN-DEMO7A9F
+
+LICENÇA PRO (cole no campo Licença → botão "Colar licença demo" ou copie):
+
+Mnxwcm98ZGVtbzdhOWYzZTJiMWM4NGQ1NmU3OGY5MGFifERlbW9uc3RyYWNhbyBWaWRlbw.ltFda2Noi6izBXZy9UJ1P99QTDtPssXiGab7L2ZoltSkGLMp6fqvkzadfkJ0bwkorP0Swt6FTnFrtAB_GsrYBw
+
+No APK REAL no celular:
+  Configurações → ID do aparelho → copie o ID do SEU Moto
+  A DEV ALN gera licença com GERAR-LICENCA.bat (não use a chave acima no celular).
+
+Roteiro rápido para gravar:
+  1. INICIAR-DEMO.bat
+  2. Splash → Minhas rotas → Continuar entrega
+  3. Entreguei / mapa com pins verdes e cinza
+  4. Configurações → Ativar PRO → colar licença demo
+  5. Comparar planos → voltar → rota com linha laranja
+
+Teclas: 1 Hub · 2 Planejar · 3 Entrega · 4 Licença · 5 Planos

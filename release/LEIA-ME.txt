@@ -1,0 +1,13 @@
+APK oficial ROTA PRIME
+======================
+
+Apos COMPILAR.APK.bat o arquivo fica em:
+
+  build\app\outputs\flutter-apk\ROTA_PRIME.apk
+
+(~26 MB, ARM 32 + 64 — celular e emulador ARM)
+
+Conferencia: ROTA_PRIME.CONFIRA.txt (mesma pasta do APK)
+
+A pasta release\ aqui e legado; use o caminho build\ acima.
+

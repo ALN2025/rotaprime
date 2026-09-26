@@ -1,0 +1,15 @@
+ROTA PRIME — código alinhado ao APK build 30 (GitHub)
+=====================================================
+
+O repositório no GitHub NÃO tinha o código-fonte Dart — só o APK.
+Este projeto local foi REVERTIDO das correções que causavam travamento
+(importação “rápida” em background, agrupamento pesado de endereço, etc.)
+
+APK oficial (use este no celular AGORA, sem recompilar):
+  release\ROTA_PRIME.apk  (27 580 946 bytes)
+  https://github.com/ALN2025/rotaprime/releases/download/v1.2.0/ROTA_PRIME.apk
+
+Quando for compilar de novo:
+  COMPILAR.APK.bat  →  release\ROTA_PRIME.apk (celular)
+
+Versão: 1.2.0+30 em pubspec.yaml
