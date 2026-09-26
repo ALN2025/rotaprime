@@ -27,10 +27,12 @@ class UserPrefsService {
 
   MapSettingsState mapSettingsFromJson(Map<String, dynamic>? json) {
     if (json == null) return const MapSettingsState();
-    MapBasemap basemap = MapBasemap.standard;
+    MapBasemap basemap = MapBasemap.streets;
     final bm = json['basemap'] as String?;
-    for (final v in MapBasemap.values) {
-      if (v.name == bm) basemap = v;
+    if (bm != null && bm != 'standard') {
+      for (final v in MapBasemap.values) {
+        if (v.name == bm) basemap = v;
+      }
     }
     NavAppPreference navApp = NavAppPreference.wazeFirst;
     final na = json['navApp'] as String?;

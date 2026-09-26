@@ -74,7 +74,7 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
 
 
 
-    await _waitMinSplash(started, const Duration(milliseconds: 2200));
+    await _waitMinSplash(started, const Duration(milliseconds: 1400));
 
 
 

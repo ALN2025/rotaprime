@@ -42,7 +42,8 @@ class RouteMap extends StatefulWidget {
     this.onUserMapGesture,
     this.showStopCallouts = false,
     this.allowRoutePolylines = true,
-    this.fastTileLayer = true,
+    this.fastTileLayer = false,
+    this.lightweightMarkers = false,
     this.hideCompletedStops = false,
   });
 
@@ -72,6 +73,8 @@ class RouteMap extends StatefulWidget {
   final bool allowRoutePolylines;
   /// Menos tiles em buffer — mapa mais leve na entrega ativa.
   final bool fastTileLayer;
+  /// Rotas grandes: pins menores, sem sombra (celular fraco).
+  final bool lightweightMarkers;
   /// Oculta pins já entregues / não entregues (mapa só com o que falta).
   final bool hideCompletedStops;
 
@@ -248,11 +251,12 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
     final legOnly = widget.legRouteOnly || (widget.navigationView && hasLeg);
     if (legOnly) {
       final band = _circuitStreetStroke(_mapZoom);
+      final thin = _thinPolyline(points, max: 120);
       return [
         PolylineLayer(
           polylines: [
             Polyline(
-              points: points,
+              points: thin,
               strokeWidth: band,
               color: AppColors.activeDeliveryRouteEdge,
               strokeCap: StrokeCap.round,
@@ -263,7 +267,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
         PolylineLayer(
           polylines: [
             Polyline(
-              points: points,
+              points: thin,
               strokeWidth: band,
               color: AppColors.activeDeliveryRouteFill,
               strokeCap: StrokeCap.round,
@@ -277,12 +281,24 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
     return _fullRoutePolylineLayers(points, stroke: widget.navigationView ? 5.0 : 4.0);
   }
 
+  static List<LatLng> _thinPolyline(List<LatLng> points, {int max = 160}) {
+    if (points.length <= max) return points;
+    final step = points.length / max;
+    final out = <LatLng>[];
+    for (var i = 0; i < max; i++) {
+      out.add(points[(i * step).floor().clamp(0, points.length - 1)]);
+    }
+    if (out.last != points.last) out.add(points.last);
+    return out;
+  }
+
   List<Widget> _fullRoutePolylineLayers(List<LatLng> points, {required double stroke}) {
+    final thin = _thinPolyline(points);
     return [
       PolylineLayer(
         polylines: [
           Polyline(
-            points: points,
+            points: thin,
             strokeWidth: stroke + 4.0,
             color: AppColors.routeLineHalo,
             strokeCap: StrokeCap.round,
@@ -293,7 +309,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
       PolylineLayer(
         polylines: [
           Polyline(
-            points: points,
+            points: thin,
             strokeWidth: stroke,
             color: AppColors.routeLineCore,
             strokeCap: StrokeCap.round,
@@ -307,8 +323,8 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   MapBasemap get _effectiveBasemap => widget.basemap;
 
   List<Widget> _basemapTileLayers(MapBasemap basemap) {
-    final pan = widget.fastTileLayer ? 0 : 2;
-    final keep = widget.fastTileLayer ? 0 : 2;
+    final pan = widget.fastTileLayer ? 1 : 2;
+    final keep = widget.fastTileLayer ? 1 : 2;
     final layers = <Widget>[
       _mapTileLayer(
         basemap: basemap,
@@ -427,6 +443,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
                       parada: p,
                       selected: _isSelected(p),
                       highlighted: _isHighlighted(p),
+                      compact: widget.lightweightMarkers,
                       deliveryMode: widget.legRouteOnly,
                       showMapCallout: widget.showStopCallouts &&
                           !widget.legRouteOnly &&
@@ -486,6 +503,7 @@ class _StopPin extends StatelessWidget {
     required this.parada,
     required this.selected,
     required this.highlighted,
+    this.compact = false,
     this.deliveryMode = false,
     this.showMapCallout = false,
   });
@@ -494,6 +512,7 @@ class _StopPin extends StatelessWidget {
   final Parada parada;
   final bool selected;
   final bool highlighted;
+  final bool compact;
   final bool deliveryMode;
   final bool showMapCallout;
 
@@ -557,28 +576,34 @@ class _StopPin extends StatelessWidget {
   Widget _buildPinBody() {
     final delivered = _state == MapPinDeliveryState.delivered;
     final showOrderNumber = _state == MapPinDeliveryState.pending || selected;
+    final w = (compact
+            ? (selected ? 32.0 : (highlighted ? 28.0 : 22.0))
+            : (selected ? 40.0 : (highlighted ? 34.0 : 28.0)))
+        .toDouble();
     final inner = Container(
-      width: selected ? 40 : (highlighted ? 34 : 28),
-      height: selected ? 40 : (highlighted ? 34 : 28),
+      width: w,
+      height: w,
       decoration: BoxDecoration(
         color: _fillColor.withValues(alpha: delivered && !selected ? 0.82 : 1),
         shape: BoxShape.circle,
         border: Border.all(
           color: selected ? AppColors.orange : Colors.white,
-          width: selected ? 4 : (highlighted ? 3 : 2),
+          width: selected ? 3 : (highlighted ? 2 : (compact ? 1.5 : 2)),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: selected
-                ? AppColors.orange.withValues(alpha: 0.85)
-                : (_state == MapPinDeliveryState.failed
-                    ? AppColors.stopFailed.withValues(alpha: 0.45)
-                    : (deliveryMode ? Colors.black87 : Colors.black54)),
-            blurRadius: selected ? 14 : (deliveryMode ? 6 : 4),
-            spreadRadius: selected ? 3 : (deliveryMode ? 1 : 0),
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: compact
+            ? null
+            : [
+                BoxShadow(
+                  color: selected
+                      ? AppColors.orange.withValues(alpha: 0.85)
+                      : (_state == MapPinDeliveryState.failed
+                          ? AppColors.stopFailed.withValues(alpha: 0.45)
+                          : (deliveryMode ? Colors.black87 : Colors.black54)),
+                  blurRadius: selected ? 14 : (deliveryMode ? 6 : 4),
+                  spreadRadius: selected ? 3 : (deliveryMode ? 1 : 0),
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       alignment: Alignment.center,
       child: showOrderNumber

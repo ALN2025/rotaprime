@@ -106,9 +106,9 @@ Widget _item(
         fontWeight: FontWeight.w500,
       ),
     ),
-    onTap: () async {
+    onTap: () {
       Navigator.pop(ctx);
-      await action();
+      Future.microtask(() => action());
     },
   );
 }

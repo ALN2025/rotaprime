@@ -896,7 +896,9 @@ class RotaNotifier extends StateNotifier<RotaState> {
     );
     unawaited(stripRouteTraceUnlessProOptimized());
     unawaited(_purgeEmptyDraftRoutes(isar, keepRotaId: rota.id));
-    unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(ordered));
+    if (ordered.length <= 80) {
+      unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(ordered));
+    }
     unawaited(fillMissingGeocodesForCurrentRoute());
     return rota.id;
   }
@@ -983,7 +985,9 @@ class RotaNotifier extends StateNotifier<RotaState> {
         excelBytes: null,
         pendingImportCachePath: null,
       );
-      unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(combined));
+      if (combined.length <= 80) {
+        unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(combined));
+      }
       unawaited(fillMissingGeocodesForCurrentRoute());
       return rotaId;
     } catch (e) {
@@ -1025,7 +1029,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
     }
     LatLng? driver = state.driverPosition;
     if (state.useGpsOrigin) {
-      driver ??= await _location.getCurrentLatLng();
+      driver ??= await _location.getCurrentLatLngQuick();
       state = state.copyWith(
         driverPosition: driver ?? state.driverPosition,
         statusMessage: driver == null
@@ -1051,11 +1055,20 @@ class RotaNotifier extends StateNotifier<RotaState> {
       );
     }
 
+    DateTime? lastProgressUi;
     Future<OsrmOptimizationResult> runOptimize(LatLng? fromDriver) {
       return _osrm.optimizeRoute(
         state.paradas,
         startFromDriver: fromDriver,
         onProgress: (step, total, message) {
+          final now = DateTime.now();
+          if (lastProgressUi != null &&
+              step < total &&
+              now.difference(lastProgressUi!) <
+                  const Duration(milliseconds: 320)) {
+            return;
+          }
+          lastProgressUi = now;
           final frac = total > 0 ? (step / total).clamp(0.05, 0.98) : 0.1;
           state = state.copyWith(
             statusMessage: optimizeStatusForUser(message, step, total),
@@ -1462,8 +1475,15 @@ class RotaNotifier extends StateNotifier<RotaState> {
 
   LatLng? _navigationOrigin({Parada? afterParada}) {
     if (state.driverPosition != null) return state.driverPosition;
-    final fromStop = afterParada ?? paradaById(state.navigationTargetParadaId ?? -1);
-    return fromStop != null ? latLngForParada(fromStop) : null;
+    final target =
+        afterParada ?? paradaById(state.navigationTargetParadaId ?? -1);
+    if (target == null) return null;
+    final prev = previousInRouteOrder(state.paradas, target);
+    if (prev != null) {
+      final fromPrev = latLngForParada(prev);
+      if (fromPrev != null) return fromPrev;
+    }
+    return latLngForParada(target);
   }
 
   /// Só o trecho até o alvo (OSRM). Trechos já percorridos / outros alvos não são desenhados.

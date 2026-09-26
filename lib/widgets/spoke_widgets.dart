@@ -480,45 +480,8 @@ class OptimizingRouteDialog extends StatefulWidget {
   State<OptimizingRouteDialog> createState() => _OptimizingRouteDialogState();
 }
 
-class _OptimizingRouteDialogState extends State<OptimizingRouteDialog>
-    with SingleTickerProviderStateMixin {
-  static const _logoSize = Size(88, 88);
-
-  late final AnimationController _orbitCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _orbitCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _orbitCtrl.dispose();
-    super.dispose();
-  }
-
-  Offset _pinOnTriangle(double t) {
-    final w = _logoSize.width;
-    final h = _logoSize.height;
-    final top = Offset(w * 0.5, h * 0.08);
-    final br = Offset(w * 0.92, h * 0.78);
-    final bl = Offset(w * 0.08, h * 0.78);
-    final seg = (t % 1.0) * 3;
-    if (seg < 1) {
-      final u = seg;
-      return Offset.lerp(top, br, u)!;
-    }
-    if (seg < 2) {
-      final u = seg - 1;
-      return Offset.lerp(br, bl, u)!;
-    }
-    final u = seg - 2;
-    return Offset.lerp(bl, top, u)!;
-  }
+class _OptimizingRouteDialogState extends State<OptimizingRouteDialog> {
+  static const _logoSize = Size(72, 72);
 
   @override
   Widget build(BuildContext context) {
@@ -553,25 +516,15 @@ class _OptimizingRouteDialogState extends State<OptimizingRouteDialog>
             SizedBox(
               width: _logoSize.width,
               height: _logoSize.height,
-              child: AnimatedBuilder(
-                animation: _orbitCtrl,
-                builder: (context, _) {
-                  final pos = _pinOnTriangle(_orbitCtrl.value);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      CustomPaint(
-                        size: _logoSize,
-                        painter: _PenroseLogoPainter(),
-                      ),
-                      Positioned(
-                        left: pos.dx - 16,
-                        top: pos.dy - 28,
-                        child: const Icon(Icons.location_on, color: Colors.red, size: 32),
-                      ),
-                    ],
-                  );
-                },
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: _logoSize,
+                    painter: _PenroseLogoPainter(),
+                  ),
+                  const Icon(Icons.location_on, color: Colors.red, size: 28),
+                ],
               ),
             ),
             const SizedBox(height: 24),

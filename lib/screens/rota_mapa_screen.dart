@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -70,13 +72,11 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
   RouteMapPanelMode _panelMode = RouteMapPanelMode.map;
   bool _deliveryDockExpanded = false;
   bool _sheetListenerAttached = false;
+  bool _optimizingRoute = false;
 
   @override
   void initState() {
     super.initState();
-    _sheetController.addListener(() {
-      if (mounted) setState(() {});
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _attachSheetListener();
       _enterDriverMapMode(animate: false);
@@ -84,6 +84,9 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
       final isPro = ref.read(subscriptionProvider).isPro;
       if (rota?.otimizada == true) {
         if (mounted) setState(() => _optimized = true);
+        if (ref.read(rotaProvider).paradas.length <= 45) {
+          await _syncNavigationTraceForTarget();
+        }
       } else if (!isPro && ref.read(rotaProvider).paradas.isNotEmpty) {
         await ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly();
         if (mounted) setState(() => _optimized = true);
@@ -92,7 +95,11 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
         _showSearchAndAddDialog();
       }
       if (!mounted) return;
-      fitMapControllerToParadas(_mapController, ref.read(rotaProvider).paradas);
+      final toFit = ref.read(rotaProvider).paradas;
+      if (toFit.length > 40) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+      if (mounted) fitMapControllerToParadas(_mapController, toFit);
     });
   }
 
@@ -152,14 +159,40 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
 
   void _selectNextPendingParada() {
     final paradas = ref.read(rotaProvider).paradas;
+    final isPro = ref.read(subscriptionProvider).isPro;
+    final optimized = ref.read(rotaProvider).rota?.otimizada == true;
     for (final p in paradas) {
       if (!p.entregue && !p.falha) {
+        if (isPro && optimized) {
+          unawaited(
+            ref.read(rotaProvider.notifier).selectNavigationTarget(p.id),
+          );
+        }
         setState(() => _selectedParadaId = p.id);
         _moveToParada(p);
         return;
       }
     }
     setState(() => _selectedParadaId = null);
+  }
+
+  Future<void> _syncNavigationTraceForTarget({int? paradaId}) async {
+    final isPro = ref.read(subscriptionProvider).isPro;
+    if (!isPro || ref.read(rotaProvider).rota?.otimizada != true) return;
+    var id = paradaId ??
+        _selectedParadaId ??
+        ref.read(rotaProvider).navigationTargetParadaId;
+    if (id == null) {
+      for (final p in ref.read(rotaProvider).paradas) {
+        if (!p.entregue && !p.falha) {
+          id = p.id;
+          if (mounted) setState(() => _selectedParadaId = id);
+          break;
+        }
+      }
+    }
+    if (id == null) return;
+    await ref.read(rotaProvider.notifier).selectNavigationTarget(id);
   }
 
   @override
@@ -368,24 +401,34 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
       barrierDismissible: false,
       builder: (ctx) => Consumer(
         builder: (context, ref, _) {
-          final st = ref.watch(rotaProvider);
+          final statusMessage =
+              ref.watch(rotaProvider.select((s) => s.statusMessage));
+          final progress =
+              ref.watch(rotaProvider.select((s) => s.optimizeProgress));
           return OptimizingRouteDialog(
-            statusMessage: st.statusMessage,
-            progress: st.optimizeProgress,
+            statusMessage: statusMessage,
+            progress: progress,
           );
         },
       ),
     );
 
     try {
+      if (mounted) setState(() => _optimizingRoute = true);
       await ref.read(rotaProvider.notifier).optimizeRoute(
             isPro: ref.read(subscriptionProvider).isPro,
           );
       if (!mounted) return;
       setState(() => _optimized = true);
       _enterDriverMapMode(animate: true);
+      if (ref.read(rotaProvider).paradas.length <= 45) {
+        await _syncNavigationTraceForTarget(
+          paradaId: _selectedParadaId ?? ref.read(rotaProvider).navigationTargetParadaId,
+        );
+      }
     } catch (_) {
       if (!mounted) return;
+      setState(() => _optimizingRoute = false);
       Navigator.of(context, rootNavigator: true).pop();
       await showOsrmFailDialog(
         context,
@@ -396,12 +439,14 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     }
 
     if (!mounted) return;
+    if (mounted) setState(() => _optimizingRoute = false);
     Navigator.of(context, rootNavigator: true).pop();
   }
 
   Future<void> _deleteRoute() async {
     final notifier = ref.read(rotaProvider.notifier);
     final ok = await showDialog<bool>(
+      barrierDismissible: true,
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.sheet,
@@ -419,14 +464,40 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
         ],
       ),
     );
-    if (ok == true) {
+    if (ok != true || !mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: Card(
+            color: AppColors.sheet,
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppColors.orange),
+                  SizedBox(height: 16),
+                  Text('Removendo rota…', style: TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
       await notifier.deleteCurrentRoute();
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeMapScreen()),
-        (r) => false,
-      );
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
     }
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeMapScreen()),
+      (r) => false,
+    );
   }
 
   Future<void> _copyStops() async {
@@ -538,11 +609,23 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
       }
     });
 
-    final state = ref.watch(rotaProvider);
+    final paradas = ref.watch(rotaProvider.select((s) => s.paradas));
+    final rota = ref.watch(rotaProvider.select((s) => s.rota));
+    final routePoints = ref.watch(rotaProvider.select((s) => s.routePoints));
+    final navigationLegPoints =
+        ref.watch(rotaProvider.select((s) => s.navigationLegPoints));
+    final navigationTargetParadaId =
+        ref.watch(rotaProvider.select((s) => s.navigationTargetParadaId));
+    final driverPosition =
+        ref.watch(rotaProvider.select((s) => s.driverPosition));
+    final totalParadas = ref.watch(rotaProvider.select((s) => s.totalParadas));
+    final totalPacotes = ref.watch(rotaProvider.select((s) => s.totalPacotes));
+    final allowManualAdd =
+        ref.watch(rotaProvider.select((s) => s.allowManualParadaEntry));
+    final useGpsOrigin = ref.watch(rotaProvider.select((s) => s.useGpsOrigin));
     final basemap = ref.watch(mapSettingsProvider).basemap;
-    final paradas = state.paradas;
+    final mapParadas = _optimizingRoute ? const <Parada>[] : paradas;
     final visibleParadas = _filteredParadas(paradas);
-    final rota = state.rota;
     final routeOptimized = rota?.otimizada == true;
     final dur = routeOptimized ? (rota?.duracaoMinutos ?? 0) : 0;
     final h = dur ~/ 60;
@@ -552,12 +635,14 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
         : '';
     final isPro = ref.watch(subscriptionProvider).isPro;
     final showOsrmRoute = isPro && routeOptimized;
-    final totalParadas = state.totalParadas;
-    final totalPacotes = state.totalPacotes;
+    final navTargetId = _selectedParadaId ?? navigationTargetParadaId;
+    final leg = navigationLegPoints;
+    final showLegToTarget =
+        showOsrmRoute && navTargetId != null && leg.length >= 2;
+    final showFullOptimizedRoute = showOsrmRoute && !showLegToTarget;
     final routeTotalsLabel = totalPacotes == totalParadas
         ? '$totalParadas paradas'
         : '$totalParadas paradas · $totalPacotes pacotes';
-    final allowManualAdd = state.allowManualParadaEntry;
     final routeActive = rota?.status == RotaStatus.ativa;
     final selectedParada = _selectedParada(paradas);
     final previousInRoute = selectedParada != null
@@ -598,18 +683,17 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
           children: [
             Positioned.fill(
               child: RouteMap(
-                paradas: paradas,
-                fastTileLayer: true,
-                routePoints: showOsrmRoute ? state.routePoints : const [],
-                allowRoutePolylines: showOsrmRoute,
-                driverPosition: state.driverPosition,
-                highlightStop: _selectedParadaId == null &&
-                        state.navigationTargetParadaId == null &&
-                        _optimized
-                    ? 1
-                    : null,
-                selectedParadaId:
-                    _selectedParadaId ?? (routeOptimized ? state.navigationTargetParadaId : null),
+                paradas: mapParadas,
+                fastTileLayer: paradas.length > 20,
+                lightweightMarkers: paradas.length > 28,
+                routePoints: showFullOptimizedRoute ? routePoints : const [],
+                navigationLegPoints: showLegToTarget ? leg : const [],
+                legRouteOnly: showLegToTarget,
+                allowRoutePolylines:
+                    showFullOptimizedRoute || showLegToTarget,
+                driverPosition: driverPosition,
+                highlightStop: null,
+                selectedParadaId: navTargetId,
                 mapController: _mapController,
                 onParadaTap: _openParada,
                 basemap: basemap,
@@ -633,8 +717,12 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
               builder: (context, scrollController) {
                 return Consumer(
                   builder: (context, ref, _) {
-                    final sheetState = ref.watch(rotaProvider);
-                    final sheetParadas = sheetState.paradas;
+                    final sheetParadas = ref.watch(
+                      rotaProvider.select((s) => s.paradas),
+                    );
+                    final selectedColumns = ref.watch(
+                      rotaProvider.select((s) => s.selectedColumns),
+                    );
                     final selected = _selectedParada(sheetParadas);
                     final mapSettings = ref.watch(mapSettingsProvider);
 
@@ -673,7 +761,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                             parada: selected,
                                             totalStops: totalPacotes,
                                             allParadas: paradas,
-                                            selectedColumns: sheetState.selectedColumns,
+                                            selectedColumns: selectedColumns,
                                             stopIdDisplay: mapSettings.stopIdDisplay,
                                             emphasizedStopHeader: true,
                                             omitAddressAndPackageTiles: true,
@@ -812,19 +900,19 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          if (state.driverPosition != null)
+                          if (driverPosition != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                'Motorista: ${state.driverPosition!.latitude.toStringAsFixed(5)}, '
-                                '${state.driverPosition!.longitude.toStringAsFixed(5)}',
+                                'Motorista: ${driverPosition.latitude.toStringAsFixed(5)}, '
+                                '${driverPosition.longitude.toStringAsFixed(5)}',
                                 style: const TextStyle(color: AppColors.orange, fontSize: 11),
                               ),
                             ),
                           const SizedBox(height: 12),
                           SwitchListTile(
                             contentPadding: EdgeInsets.zero,
-                            value: state.useGpsOrigin,
+                            value: useGpsOrigin,
                             activeTrackColor: AppColors.orange,
                             title: const Text(
                               'Iniciar no local atual (GPS)',
@@ -860,7 +948,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                               indexLabel: '',
                               timeLabel: DateFormat('HH:mm').format(DateTime.now()),
                               title: 'Ponto de partida',
-                              subtitle: state.driverPosition != null
+                              subtitle: driverPosition != null
                                   ? 'GPS atual'
                                   : 'Origem da rota',
                               isStart: true,

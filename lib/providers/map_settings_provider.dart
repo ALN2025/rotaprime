@@ -82,13 +82,22 @@ class MapSettingsState {
 }
 
 class MapSettingsNotifier extends StateNotifier<MapSettingsState> {
-  MapSettingsNotifier(this._ref) : super(const MapSettingsState());
+  MapSettingsNotifier(this._ref) : super(const MapSettingsState()) {
+    if (state.basemap == MapBasemap.standard) {
+      state = state.copyWith(basemap: MapBasemap.streets);
+    }
+  }
 
   final Ref _ref;
 
   void _persistLater() => Future.microtask(() => persistAllSettings(_ref));
 
-  void applyFromStorage(MapSettingsState saved) => state = saved;
+  void applyFromStorage(MapSettingsState saved) {
+    final basemap = saved.basemap == MapBasemap.standard
+        ? MapBasemap.streets
+        : saved.basemap;
+    state = saved.copyWith(basemap: basemap);
+  }
 
   void setBasemap(MapBasemap value) {
     state = state.copyWith(basemap: value);

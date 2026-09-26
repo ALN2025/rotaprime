@@ -41,7 +41,13 @@ Future<void> showMapLayersSheet(BuildContext context, WidgetRef ref) {
                         selected ? Icons.radio_button_checked : Icons.radio_button_off,
                         color: selected ? AppColors.orange : Colors.white38,
                       ),
-                      title: Text(b.label, style: const TextStyle(color: Colors.white)),
+                      title: Text(
+                        b == MapBasemap.streets ? '${b.label} ★' : b.label,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: b == MapBasemap.streets ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
                       onTap: () {
                         ref.read(mapSettingsProvider.notifier).setBasemap(b);
                         Navigator.pop(ctx);

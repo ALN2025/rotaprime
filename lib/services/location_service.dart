@@ -37,6 +37,25 @@ class LocationService {
     return fix?.position;
   }
 
+  /// Otimização de rota: não trava minutos esperando GPS de alta precisão.
+  Future<LatLng?> getCurrentLatLngQuick() async {
+    final ok = await ensurePermission();
+    if (!ok) return null;
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) return null;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      return LatLng(pos.latitude, pos.longitude);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<DriverFix?> getCurrentFix() async {
     final ok = await ensurePermission();
     if (!ok) return null;

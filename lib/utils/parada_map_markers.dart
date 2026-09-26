@@ -19,12 +19,20 @@ List<Parada> rowsInMapPinGroup(List<Parada> all, Parada anchor) {
 List<Parada> _rowsInMapPinGroup(List<Parada> all, Parada anchor) =>
     rowsInMapPinGroup(all, anchor);
 
+/// Acima disso, agrupa por endereço no mapa (115 pins travam o celular).
+const kMapMaxIndividualPins = 28;
+
 List<Parada> representativeParadasForMap(
   List<Parada> all, {
   required bool hideCompleted,
+  int maxIndividualPins = kMapMaxIndividualPins,
 }) {
   final withCoords = all.where((p) => p.latitude != null && p.longitude != null);
-  final onePinPerPackage = ParadaLabels.routeUsesUnifiedPinOrder(all);
+  final pendingCount = hideCompleted
+      ? withCoords.where((p) => !p.entregue && !p.falha).length
+      : withCoords.length;
+  final onePinPerPackage = pendingCount <= maxIndividualPins &&
+      ParadaLabels.routeUsesUnifiedPinOrder(all);
 
   if (onePinPerPackage) {
     final out = <Parada>[];
