@@ -1,5 +1,14 @@
-{
-  "revoked_device_ids": [],
-  "trial_used_device_ids": [],
-  "_comment": "revoked_device_ids: revoga PRO pago. trial_used_device_ids: trial já usado neste aparelho (anti-reinstalar). Apps Script ou manual."
-}
+{
+  "revoked_device_ids": [],
+  "trial_used_device_ids": [
+    "3e116e6e679ac2497becb719",
+    "735511f84367a75899af3598",
+    "8d155b56900dece9dc023ef9",
+    "8e377da16dda2e269c42d68e",
+    "913d42f8b6ed7667e2b2e190",
+    "a69355ca92644966ee6f5505",
+    "d6557bc9478339264ebe7b76",
+    "d7954807b9bfaff490aefe56"
+  ],
+  "_comment": "revoked_device_ids: revoga PRO pago. trial_used_device_ids: trial já usado neste aparelho (anti-reinstalar). Apps Script ou manual."
+}
