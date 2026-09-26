@@ -42,7 +42,7 @@ class RouteMap extends StatefulWidget {
     this.onUserMapGesture,
     this.showStopCallouts = false,
     this.allowRoutePolylines = true,
-    this.fastTileLayer = false,
+    this.fastTileLayer = true,
     this.hideCompletedStops = false,
   });
 
@@ -308,6 +308,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
 
   List<Widget> _basemapTileLayers(MapBasemap basemap) {
     final pan = widget.fastTileLayer ? 0 : 2;
+    final keep = widget.fastTileLayer ? 0 : 2;
     final layers = <Widget>[
       _mapTileLayer(
         basemap: basemap,
@@ -315,6 +316,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
         maxNativeZoom: basemap.maxNativeZoom,
         labelsOverlay: false,
         panBuffer: pan,
+        keepBuffer: keep,
         retina: basemap.retinaOnServer,
       ),
     ];
@@ -329,6 +331,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
           labelsOverlay: true,
           labelOverlayIndex: i,
           panBuffer: pan,
+          keepBuffer: keep,
           retina: false,
         ),
       );
@@ -342,6 +345,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
     required int maxNativeZoom,
     required bool labelsOverlay,
     required int panBuffer,
+    required int keepBuffer,
     required bool retina,
     int labelOverlayIndex = 0,
   }) {
@@ -352,6 +356,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
       maxNativeZoom: maxNativeZoom,
       maxZoom: MapBasemap.appMaxZoom,
       panBuffer: panBuffer,
+      keepBuffer: keepBuffer,
       retinaMode: retina,
       tileProvider: OfflineFirstTileProvider(
         basemap: basemap,
@@ -397,7 +402,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
           ),
           onPositionChanged: (camera, hasGesture) {
             final z = camera.zoom;
-            if ((z - _mapZoom).abs() > 0.08) {
+            if ((z - _mapZoom).abs() > 0.2) {
               setState(() => _mapZoom = z);
             }
             if (hasGesture) widget.onUserMapGesture?.call();

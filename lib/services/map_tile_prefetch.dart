@@ -6,6 +6,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:rota_prime/app/map_basemap.dart';
 import 'package:rota_prime/models/parada.dart';
+import 'package:rota_prime/services/settings_persistence.dart';
+import 'package:rota_prime/services/user_prefs_service.dart';
 
 const _tileUserAgent =
     'ROTA_PRIME/1.0 (+https://rotaprime.app; com.rotaprime.rota_prime)';
@@ -62,11 +64,18 @@ class MapTilePrefetch {
     onProgress?.call('Mapa da rota salvo para uso offline');
   }
 
+  /// Mapa salvo nas preferências do aparelho (após importar rota).
+  static Future<void> prefetchDeviceBasemapForParadas(List<Parada> paradas) async {
+    final json = await UserPrefsService().load(kLocalSettingsKey);
+    final basemap = UserPrefsService().mapSettingsFromJson(json).basemap;
+    await prefetchForRoute(paradas: paradas, basemap: basemap, maxZoom: 15);
+  }
+
   static Future<void> prefetchForRoute({
     required List<Parada> paradas,
     MapBasemap basemap = MapBasemap.streets,
     int minZoom = 14,
-    int maxZoom = 17,
+    int maxZoom = 15,
     void Function(String message)? onProgress,
   }) async {
     final points = <LatLng>[];

@@ -18,8 +18,8 @@ Future<void> main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
   final imageCache = PaintingBinding.instance.imageCache;
-  imageCache.maximumSize = 80;
-  imageCache.maximumSizeBytes = 48 << 20;
+  imageCache.maximumSize = 60;
+  imageCache.maximumSizeBytes = 32 << 20;
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,

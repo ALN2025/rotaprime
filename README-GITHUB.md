@@ -146,7 +146,7 @@ Detalhes passo a passo: **[GUIA-USUARIO.md](GUIA-USUARIO.md)**
 
 ## 📜 Licença
 
-Este projeto está sob licença **MIT** — veja [LICENSE](LICENSE).
+Este projeto está sob licença **MIT** — veja [LICENSE.md](LICENSE.md).
 
 O aplicativo **ROTA PRIME** é distribuído como APK; uso comercial e licenciamento PRO conforme política do titular (**DEV ALN / ROTA PRIME**).
 

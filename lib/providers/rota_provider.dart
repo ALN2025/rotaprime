@@ -896,7 +896,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
     );
     unawaited(stripRouteTraceUnlessProOptimized());
     unawaited(_purgeEmptyDraftRoutes(isar, keepRotaId: rota.id));
-    unawaited(MapTilePrefetch.prefetchForRoute(paradas: ordered, maxZoom: 15));
+    unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(ordered));
     unawaited(fillMissingGeocodesForCurrentRoute());
     return rota.id;
   }
@@ -983,7 +983,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
         excelBytes: null,
         pendingImportCachePath: null,
       );
-      unawaited(MapTilePrefetch.prefetchForRoute(paradas: combined, maxZoom: 15));
+      unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(combined));
       unawaited(fillMissingGeocodesForCurrentRoute());
       return rotaId;
     } catch (e) {
