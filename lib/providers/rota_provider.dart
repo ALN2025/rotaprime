@@ -89,6 +89,7 @@ class RotaState {
     this.optimizeProgress = 0,
     this.routeActiveSince,
     this.pendingMergeImport = false,
+    this.routeImportInProgress = false,
   });
 
   final int? rotaId;
@@ -117,6 +118,8 @@ class RotaState {
   final DateTime? routeActiveSince;
   /// Acrescentar próximo arquivo à rota atual (Magalog + Loggi + …).
   final bool pendingMergeImport;
+  /// Planilha importando — esconde botões do mapa e rodapé do shell.
+  final bool routeImportInProgress;
 
   /// Pacotes marcados como entregues (linhas).
   int get entregues => RouteDeliveryStats.deliveredPackages(paradas);
@@ -173,6 +176,7 @@ class RotaState {
     DateTime? routeActiveSince,
     bool clearRouteActiveSince = false,
     bool? pendingMergeImport,
+    bool? routeImportInProgress,
   }) {
     return RotaState(
       rotaId: rotaId ?? this.rotaId,
@@ -200,6 +204,8 @@ class RotaState {
           ? null
           : (routeActiveSince ?? this.routeActiveSince),
       pendingMergeImport: pendingMergeImport ?? this.pendingMergeImport,
+      routeImportInProgress:
+          routeImportInProgress ?? this.routeImportInProgress,
     );
   }
 }
@@ -242,6 +248,11 @@ class RotaNotifier extends StateNotifier<RotaState> {
   void clearImportStatusMessage() {
     _lastImportStatusUi = null;
     state = state.copyWith(statusMessage: '');
+  }
+
+  void setRouteImportInProgress(bool inProgress) {
+    if (state.routeImportInProgress == inProgress) return;
+    state = state.copyWith(routeImportInProgress: inProgress);
   }
 
   void _setImportStatus(String message) {

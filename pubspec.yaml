@@ -1,7 +1,7 @@
 name: rota_prime
 description: ROTA PRIME - otimização de rotas de entrega
 publish_to: 'none'
-version: 1.2.9+42
+version: 1.2.9+43
 
 environment:
   sdk: ^3.12.2

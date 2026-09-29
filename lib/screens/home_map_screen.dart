@@ -65,6 +65,12 @@ class HomeMapScreen extends ConsumerWidget {
   @override
 
   Widget build(BuildContext context, WidgetRef ref) {
+    final importBusy = ref.watch(
+      rotaProvider.select((s) => s.routeImportInProgress),
+    );
+    if (importBusy && embeddedInShell) {
+      return const ColoredBox(color: AppColors.orange);
+    }
     final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
     final basemapSetting = ref.watch(mapSettingsProvider.select((s) => s.basemap));
     final basemap = MapBasemap.effectiveForPlan(basemapSetting, isPro: isPro);

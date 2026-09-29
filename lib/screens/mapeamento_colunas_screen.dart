@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/theme.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
-import 'package:rota_prime/screens/importando_screen.dart';
+import 'package:rota_prime/navigation/import_route_navigation.dart';
 
 class MapeamentoColunasScreen extends ConsumerStatefulWidget {
   const MapeamentoColunasScreen({
@@ -214,12 +214,7 @@ class _MapeamentoColunasScreenState extends ConsumerState<MapeamentoColunasScree
                               }
                               setState(() => _navigating = true);
                               if (!context.mounted) return;
-                              await Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const ImportandoScreen(),
-                                ),
-                                (route) => route.isFirst,
-                              );
+                              await openImportandoScreen();
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,

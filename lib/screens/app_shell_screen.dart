@@ -123,6 +123,9 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
   Widget build(BuildContext context) {
 
     final tab = ref.watch(appShellTabIndexProvider);
+    final importBusy = ref.watch(
+      rotaProvider.select((s) => s.routeImportInProgress),
+    );
 
 
 
@@ -170,7 +173,9 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
 
         ),
 
-        bottomNavigationBar: DecoratedBox(
+        bottomNavigationBar: importBusy
+            ? null
+            : DecoratedBox(
 
           decoration: BoxDecoration(
 

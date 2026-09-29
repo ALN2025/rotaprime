@@ -1266,6 +1266,9 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     );
 
     final isPro = ref.watch(subscriptionProvider).isPro;
+    final importBusy = ref.watch(
+      rotaProvider.select((s) => s.routeImportInProgress),
+    );
     final routeOptimized = rota?.otimizada == true;
     final showFullRouteTrace = isPro && routeOptimized;
     var basemap = MapBasemap.effectiveForPlan(
@@ -1381,7 +1384,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
                       ),
                     ),
                   ] else ...[
-                    if (showPlanningBarOnList)
+                    if (showPlanningBarOnList && !importBusy)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                         child: RoutePlanningActionBar(
@@ -1465,42 +1468,43 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
             ),
             ),
           ),
-          Positioned(
-            right: 12,
-            bottom: _stopDockOccupiedHeight() + 12,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (routeActive) ...[
-                  MapCircleButton(
-                    icon: _mapLocked ? Icons.lock : Icons.lock_open_outlined,
-                    onTap: _toggleMapLock,
-                  ),
+          if (!importBusy)
+            Positioned(
+              right: 12,
+              bottom: _stopDockOccupiedHeight() + 12,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (routeActive) ...[
+                    MapCircleButton(
+                      icon: _mapLocked ? Icons.lock : Icons.lock_open_outlined,
+                      onTap: _toggleMapLock,
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  const DeliveryMapLegend(),
                   const SizedBox(height: 10),
+                  MapCircleButton(
+                    icon: Icons.layers_outlined,
+                    onTap: () => showMapLayersSheet(context, ref),
+                  ),
+                  const SizedBox(height: 8),
+                  MapCircleButton(
+                    icon: Icons.explore_outlined,
+                    onTap: _resetMapNorth,
+                  ),
+                  const SizedBox(height: 8),
+                  MapCircleButton(
+                    icon: (_followGps && _followHeading && !_mapLocked)
+                        ? Icons.gps_fixed
+                        : Icons.gps_not_fixed,
+                    onTap: _recenterGps,
+                  ),
                 ],
-                const DeliveryMapLegend(),
-                const SizedBox(height: 10),
-                MapCircleButton(
-                  icon: Icons.layers_outlined,
-                  onTap: () => showMapLayersSheet(context, ref),
-                ),
-                const SizedBox(height: 8),
-                MapCircleButton(
-                  icon: Icons.explore_outlined,
-                  onTap: _resetMapNorth,
-                ),
-                const SizedBox(height: 8),
-                MapCircleButton(
-                  icon: (_followGps && _followHeading && !_mapLocked)
-                      ? Icons.gps_fixed
-                      : Icons.gps_not_fixed,
-                  onTap: _recenterGps,
-                ),
-              ],
+              ),
             ),
-          ),
-          if (showPlanningBar)
+          if (showPlanningBar && !importBusy)
             Positioned(
               left: 12,
               right: 12,
@@ -1547,24 +1551,29 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildTopBar(
-                view: _view,
-                onViewChanged: _onDeliveryViewChanged,
-                packagesDone: packagesDone,
-                packagesTotal: packagesTotal,
-                routeActive: routeActive,
-                routeActiveSince: routeActiveSince,
-                estimatedMinutes: estimatedMinutes,
-                allowManualAdd: allowManualAdd,
-              ),
+              if (!importBusy)
+                _buildTopBar(
+                  view: _view,
+                  onViewChanged: _onDeliveryViewChanged,
+                  packagesDone: packagesDone,
+                  packagesTotal: packagesTotal,
+                  routeActive: routeActive,
+                  routeActiveSince: routeActiveSince,
+                  estimatedMinutes: estimatedMinutes,
+                  allowManualAdd: allowManualAdd,
+                ),
               Expanded(
-                child: _view == CircuitDeliveryView.list
-                    ? listPane
-                    : (_mapEverShown || _mapPrimed
-                        ? mapPane
-                        : const Center(
-                            child: CircularProgressIndicator(color: AppColors.orange),
-                          )),
+                child: importBusy
+                    ? const ColoredBox(color: AppColors.orange)
+                    : (_view == CircuitDeliveryView.list
+                        ? listPane
+                        : (_mapEverShown || _mapPrimed
+                            ? mapPane
+                            : const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.orange,
+                                ),
+                              ))),
               ),
             ],
           ),

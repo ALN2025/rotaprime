@@ -26,7 +26,14 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
   @override
   void initState() {
     super.initState();
+    ref.read(rotaProvider.notifier).setRouteImportInProgress(true);
     WidgetsBinding.instance.addPostFrameCallback((_) => _runImport());
+  }
+
+  @override
+  void dispose() {
+    ref.read(rotaProvider.notifier).setRouteImportInProgress(false);
+    super.dispose();
   }
 
   Future<void> _runImport() async {
@@ -68,7 +75,8 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
               : '$nPkg pacotes · $nStop paradas — contagem exata');
       setState(() => _status = label);
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context, rootNavigator: true)
+          .popUntil((route) => route.isFirst);
       final sheetCtx = rootAppContext ?? context;
       if (!sheetCtx.mounted) return;
       navigateToRouteMap(sheetCtx, ref);
@@ -106,8 +114,12 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.orange,
-      body: SafeArea(
-        child: Padding(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      body: ColoredBox(
+        color: AppColors.orange,
+        child: SafeArea(
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -175,6 +187,7 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
                 ),
               ],
             ],
+          ),
           ),
         ),
       ),
