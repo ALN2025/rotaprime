@@ -68,21 +68,21 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
 
     final started = DateTime.now();
 
-
-
     unawaited(_warmUpInBackground());
 
-
+    try {
+      await ref.read(subscriptionProvider.notifier).load().timeout(
+            const Duration(seconds: 16),
+          );
+    } catch (e, st) {
+      if (kDebugMode) debugPrint('Boot plano/trial: $e\n$st');
+    }
 
     await _waitMinSplash(started, const Duration(milliseconds: 1400));
-
-
 
     if (!mounted) return;
 
     _openShell();
-
-
 
     unawaited(_resumeRouteAfterShell());
 
@@ -135,12 +135,6 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
     try {
 
       await ref.read(localSettingsProvider).load().timeout(const Duration(seconds: 4));
-
-    } catch (_) {}
-
-    try {
-
-      await ref.read(subscriptionProvider.notifier).load().timeout(const Duration(seconds: 6));
 
     } catch (_) {}
 

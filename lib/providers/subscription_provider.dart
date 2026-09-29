@@ -223,7 +223,27 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
   static const _policySyncMinInterval = Duration(seconds: 40);
 
+  Future<void>? _planLoadInFlight;
+
+  Future<void> _awaitPlanLoadInFlight() async {
+    final inFlight = _planLoadInFlight;
+    if (inFlight != null) await inFlight;
+  }
+
   Future<void> load() async {
+    await _awaitPlanLoadInFlight();
+    final run = _loadBody();
+    _planLoadInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (identical(_planLoadInFlight, run)) {
+        _planLoadInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _loadBody() async {
 
     final prefs = await SharedPreferences.getInstance();
 
@@ -293,9 +313,18 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
 
 
-    state = await _stateWithTrialForFreeUser(prefs, revokedNotice: revokedNotice);
+    // bustCache: evita JSON antigo do GitHub (PRO mensal removido / trial liberado no painel).
+    state = await _stateWithTrialForFreeUser(
+      prefs,
+      revokedNotice: revokedNotice,
+      bustCache: true,
+    );
 
-    state = await SubscriptionProUntilPolicy.mergeOnlineSubscription(state, prefs);
+    state = await SubscriptionProUntilPolicy.mergeOnlineSubscription(
+      state,
+      prefs,
+      bustCache: true,
+    );
 
   }
 
@@ -311,6 +340,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         return;
       }
     }
+    await _awaitPlanLoadInFlight();
     _lastPolicySyncAt = DateTime.now();
 
     final prefs = await SharedPreferences.getInstance();
