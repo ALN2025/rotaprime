@@ -1,0 +1,19 @@
+ROTA PRIME — onde fica o APK depois de compilar
+===============================================
+
+NAO fica em:  build\app\   (pasta vazia / só Gradle)
+
+Fica em:
+  build\app\outputs\flutter-apk\ROTA_PRIME.apk   <-- ESTE vai pro GitHub
+
+  Depois de compilar: SUBIR-GITHUB-RELEASE.bat (sobe esse APK para Releases)
+  build\app\outputs\flutter-apk\app-release.apk   (mesmo arquivo)
+
+Copia na raiz do projeto (apos COMPILAR.APK.bat ok):
+  ROTA_PRIME.apk
+
+Alternativa (Gradle):
+  build\app\outputs\apk\release\app-release.apk
+
+Abrir pasta no Explorer:
+  explorer "build\app\outputs\flutter-apk"

@@ -44,11 +44,11 @@ call flutter pub get
 if errorlevel 1 goto falha_gradle
 
 echo [2/4] Isar...
-call dart run build_runner build --delete-conflicting-outputs
+call dart run build_runner build
 if errorlevel 1 goto falha_gradle
 
 echo [3/4] Compilando release...
-set "ROTA_LEGACY_PACKAGING=1"
+rem Packaging JNI padrao (legacy) — nao definir ROTA_LEGACY_PACKAGING=0 aqui (quebra packageRelease no AGP 8).
 call flutter build apk --release --target-platform android-arm,android-arm64
 if errorlevel 1 goto falha_gradle
 
@@ -64,6 +64,8 @@ if not exist "%APK_OUT%" (
 if not exist "%APK_OUT%" goto falha_gradle
 
 copy /Y "%APK_OUT%" "ROTA_PRIME.apk" >nul
+if not exist "release" mkdir "release"
+copy /Y "%APK_OUT%" "release\ROTA_PRIME.apk" >nul
 
 for %%A in ("%APK_OUT%") do set "SIZE_MOBILE=%%~zA"
 if %SIZE_MOBILE% LSS 15000000 (
@@ -79,7 +81,10 @@ echo.
 echo ============================================
 echo   %CD%\%APK_OUT%
 echo   %CD%\ROTA_PRIME.apk
+echo   %CD%\release\ROTA_PRIME.apk
 echo   %SIZE_MOBILE% bytes
+echo.
+echo   GitHub: SUBIR-GITHUB-RELEASE.bat
 echo ============================================
 echo.
 

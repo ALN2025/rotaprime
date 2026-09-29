@@ -31,7 +31,7 @@
 
 ## 📥 Instalação
 
-1. Abra **[Releases](https://github.com/ALN2025/rotaprime/releases/latest)** e baixe **`ROTA_PRIME.apk`**.
+1. Abra **[Releases](https://github.com/ALN2025/rotaprime/releases/latest)** e baixe **`ROTA_PRIME.apk`** (o arquivo publicado vem de `build/app/outputs/flutter-apk/ROTA_PRIME.apk` após compilar).
 2. No celular, permita **instalar apps de fontes desconhecidas** (se o Android pedir).
 3. Toque no arquivo baixado e conclua a instalação.
 4. Conceda permissão de **localização** (e internet) para o mapa e as entregas.
