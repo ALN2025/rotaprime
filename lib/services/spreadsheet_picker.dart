@@ -165,7 +165,7 @@ Future<void> _pickSpreadsheetImportCore(WidgetRef ref, {required bool merge}) as
       return;
     }
 
-    await nav.push(
+    await nav.pushReplacement(
       MaterialPageRoute(
         builder: (_) => MapeamentoColunasScreen(addingToExistingRoute: merge),
       ),

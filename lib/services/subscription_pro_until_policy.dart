@@ -8,7 +8,7 @@ const _prefProUntilMs = 'rota_prime_pro_until_ms';
 const _prefProUntilFetchedMs = 'rota_prime_pro_until_fetched_ms';
 const _prefProUntilDeviceId = 'rota_prime_pro_until_device_id';
 
-/// PRO mensal via Mercado Pago — validade em `pro_until` no GitHub.
+/// PRO mensal via Mercado Pago — validade em `pro_until` no GitHub (só após pagamento).
 class SubscriptionProUntilPolicy {
   static Future<SubscriptionState> mergeOnlineSubscription(
     SubscriptionState base,
@@ -25,24 +25,30 @@ class SubscriptionProUntilPolicy {
 
     final deviceId = (await DeviceIdService.hardwareId()).trim().toLowerCase();
     final cachedDevice = prefs.getString(_prefProUntilDeviceId)?.trim().toLowerCase();
-    if (cachedDevice != null &&
+
+    if (prefs.getInt(_prefProUntilMs) != null &&
+        (cachedDevice == null || cachedDevice.isEmpty || cachedDevice != deviceId)) {
+      await _clearCachedUntil(prefs);
+    } else if (cachedDevice != null &&
         cachedDevice.isNotEmpty &&
         cachedDevice != deviceId) {
       await _clearCachedUntil(prefs);
     }
 
-    final untilUtc = await OnlineLicenseService.fetchProSubscriptionUntil(
+    final lookup = await OnlineLicenseService.lookupProSubscriptionUntil(
       deviceId: deviceId,
       bustCache: bustCache,
     );
 
-    if (untilUtc != null) {
-      await prefs.setInt(_prefProUntilMs, untilUtc.millisecondsSinceEpoch);
-      await prefs.setInt(_prefProUntilFetchedMs, DateTime.now().millisecondsSinceEpoch);
-      await prefs.setString(_prefProUntilDeviceId, deviceId);
-      if (_isActive(untilUtc)) {
+    if (lookup.serverResponded) {
+      final untilUtc = lookup.untilUtc;
+      if (untilUtc != null && _isActive(untilUtc)) {
+        await prefs.setInt(_prefProUntilMs, untilUtc.millisecondsSinceEpoch);
+        await prefs.setInt(_prefProUntilFetchedMs, DateTime.now().millisecondsSinceEpoch);
+        await prefs.setString(_prefProUntilDeviceId, deviceId);
         return base.copyWith(proSubscriptionUntil: untilUtc.toLocal());
       }
+      await _clearCachedUntil(prefs);
       return base.copyWith(clearProSubscriptionUntil: true);
     }
 
@@ -50,7 +56,8 @@ class SubscriptionProUntilPolicy {
     final fetchedMs = prefs.getInt(_prefProUntilFetchedMs);
     if (cachedMs != null &&
         fetchedMs != null &&
-        (cachedDevice == null || cachedDevice == deviceId)) {
+        cachedDevice != null &&
+        cachedDevice == deviceId) {
       final cached = DateTime.fromMillisecondsSinceEpoch(cachedMs, isUtc: true);
       final fetched = DateTime.fromMillisecondsSinceEpoch(fetchedMs);
       final graceEnd = cached.add(Duration(days: kLicenseOnlineGraceDays));

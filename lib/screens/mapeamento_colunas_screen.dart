@@ -214,10 +214,11 @@ class _MapeamentoColunasScreenState extends ConsumerState<MapeamentoColunasScree
                               }
                               setState(() => _navigating = true);
                               if (!context.mounted) return;
-                              await Navigator.of(context).pushReplacement(
+                              await Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(
                                   builder: (_) => const ImportandoScreen(),
                                 ),
+                                (route) => route.isFirst,
                               );
                             },
                       style: ElevatedButton.styleFrom(

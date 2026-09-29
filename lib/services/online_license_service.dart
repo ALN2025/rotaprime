@@ -119,15 +119,35 @@ class OnlineLicenseService {
     String? deviceId,
     bool bustCache = false,
   }) async {
+    final lookup = await lookupProSubscriptionUntil(
+      deviceId: deviceId,
+      bustCache: bustCache,
+    );
+    return lookup.untilUtc;
+  }
+
+  /// [serverResponded] false = offline/timeout — caller may usar cache local amarrado ao ID.
+  static Future<({DateTime? untilUtc, bool serverResponded})> lookupProSubscriptionUntil({
+    String? deviceId,
+    bool bustCache = false,
+  }) async {
     final json = await _fetchDevicePolicyJson(bustCache: bustCache);
-    if (json == null) return null;
+    if (json == null) {
+      return (untilUtc: null, serverResponded: false);
+    }
     final map = json['pro_until'];
-    if (map is! Map) return null;
+    if (map is! Map) {
+      return (untilUtc: null, serverResponded: true);
+    }
     final id = (deviceId ?? (await DeviceIdService.hardwareId())).trim().toLowerCase();
-    if (id.isEmpty) return null;
+    if (id.isEmpty) {
+      return (untilUtc: null, serverResponded: true);
+    }
     final raw = map[id];
-    if (raw is! String || raw.trim().isEmpty) return null;
-    return DateTime.tryParse(raw.trim())?.toUtc();
+    if (raw is! String || raw.trim().isEmpty) {
+      return (untilUtc: null, serverResponded: true);
+    }
+    return (untilUtc: DateTime.tryParse(raw.trim())?.toUtc(), serverResponded: true);
   }
 
   static Future<bool> registerTrialUsedDevice(String deviceId) async {
