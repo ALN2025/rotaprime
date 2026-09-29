@@ -1,6 +1,12 @@
 {
   "revoked_device_ids": [],
-  "licensed_pro_devices": {},
+  "licensed_pro_devices": {
+    "735511f84367a75899af3598": {
+      "buyer": "PRO vitalicio",
+      "registered_at": "2026-03-29T06:55:00.000Z",
+      "source": "admin"
+    }
+  },
   "trial_used_device_ids": [
     "3e116e6e679ac2497becb719",
     "76fd5748a89092cef264dcd9",
