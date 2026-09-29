@@ -47,6 +47,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /release/*.apk
+/ROTA_PRIME.apk
+/BASE APK ROTA PRIME.apk
 /demo-pc/node_modules/
 # Servidor local (legado) — app não usa; recriar se precisar backend no futuro
 /servidor/

@@ -116,7 +116,7 @@ if errorlevel 1 goto :falha
 
 echo Isar (build_runner)...
 
-call dart run build_runner build --delete-conflicting-outputs
+call dart run build_runner build
 
 if errorlevel 1 goto :falha
 

@@ -1,0 +1,5 @@
+# Opcional: URLs de checkout (copie para mercadopago-checkout.properties — gitignored se adicionar ao .gitignore)
+# Ou use --dart-define na compilação (ver license/MERCADOPAGO-INTEGRACAO.md)
+#
+# MP_CARD_URL=https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=XXXX&external_reference={device_id}
+# MP_PIX_URL=https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=YYYY&external_reference={device_id}

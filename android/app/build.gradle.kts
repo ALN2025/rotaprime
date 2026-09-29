@@ -64,8 +64,9 @@ android {
 
     packaging {
         jniLibs {
-            // true => libs comprimidas no APK (extractNativeLibs via Gradle, nao no Manifest).
-            // Celular: ROTA_LEGACY_PACKAGING=1 (~26 MB ARM). Emulador: mesma flag, so muda --target-platform.
+            // Nao declare android:extractNativeLibs no Manifest (AGP 8+).
+            // Padrao (variavel unset ou != "0"): legacy = true, APK menor, compila sem conflito.
+            // So para teste de camera: set ROTA_LEGACY_PACKAGING=0 antes do flutter build.
             useLegacyPackaging =
                 System.getenv("ROTA_LEGACY_PACKAGING") != "0"
         }
