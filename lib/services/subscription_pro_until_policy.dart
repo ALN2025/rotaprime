@@ -76,6 +76,10 @@ class SubscriptionProUntilPolicy {
     return DateTime.now().toUtc().isBefore(untilUtc);
   }
 
+  static Future<void> clearCachedProUntil(SharedPreferences prefs) async {
+    await _clearCachedUntil(prefs);
+  }
+
   static Future<void> _clearCachedUntil(SharedPreferences prefs) async {
     await prefs.remove(_prefProUntilMs);
     await prefs.remove(_prefProUntilFetchedMs);

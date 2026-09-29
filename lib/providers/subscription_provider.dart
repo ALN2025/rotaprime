@@ -16,6 +16,7 @@ import 'package:rota_prime/services/offline_license_service.dart';
 
 import 'package:rota_prime/services/online_license_service.dart';
 
+import 'package:rota_prime/services/subscription_install_session.dart';
 import 'package:rota_prime/services/subscription_pro_until_policy.dart';
 
 
@@ -247,6 +248,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
     final prefs = await SharedPreferences.getInstance();
 
+    await syncSubscriptionInstallSession(prefs);
+
 
 
     final token = prefs.getString(_prefLicenseToken);
@@ -364,6 +367,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     }
 
     final revokedNotice = prefs.getBool(_prefLicenseRevokedNotice) ?? false;
+
+    await syncSubscriptionInstallSession(prefs);
 
     state = await _stateWithTrialForFreeUser(
 
@@ -623,6 +628,11 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
 
 
+  Future<void> _clearLocalTrialMarks(SharedPreferences prefs) async {
+    await prefs.remove(_prefTrialStartMs);
+    await prefs.setBool(_prefTrialRegisteredOnline, false);
+  }
+
   Future<SubscriptionState> _startFreshTrial(
 
     SharedPreferences prefs, {
@@ -679,15 +689,19 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
     final deviceId = (await DeviceIdService.hardwareId()).trim().toLowerCase();
 
-    final trialUsedOnline =
-
-        await OnlineLicenseService.isDeviceTrialUsedOnline(bustCache: bustCache);
-
-
+    final trialUsedOnline = bustCache
+        ? await OnlineLicenseService.isDeviceTrialUsedOnlineWithRetry(
+            bustCache: true,
+          )
+        : await OnlineLicenseService.isDeviceTrialUsedOnline(
+            bustCache: bustCache,
+          );
 
     // Liberado no script (ID removido de trial_used_device_ids) → trial novo.
 
     if (trialUsedOnline == false) {
+
+      await _clearLocalTrialMarks(prefs);
 
       return _startFreshTrial(prefs, deviceId: deviceId, revokedNotice: revokedNotice);
 

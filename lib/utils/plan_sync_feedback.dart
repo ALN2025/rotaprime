@@ -13,7 +13,15 @@ Future<String> planSyncSnackBarMessage(WidgetRef ref) async {
     return 'Plano: ${sub.planLabel} · ${sub.planStatusLine}';
   }
   if (sub.isTrialActive) {
-    return 'Plano: ${sub.planLabel}';
+    return 'Plano: ${sub.planLabel} · ${sub.planStatusLine}';
+  }
+  if (sub.accessKind == PlanAccessKind.free) {
+    final trialUsed = await OnlineLicenseService.isDeviceTrialUsedOnlineWithRetry(
+      bustCache: true,
+    );
+    if (trialUsed == false) {
+      return 'Trial disponível neste aparelho — feche e abra o app ou aguarde alguns segundos.';
+    }
   }
 
   final deviceId = (await DeviceIdService.hardwareId()).trim().toLowerCase();

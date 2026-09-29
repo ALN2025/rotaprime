@@ -70,12 +70,24 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
 
     unawaited(_warmUpInBackground());
 
+    final subNotifier = ref.read(subscriptionProvider.notifier);
     try {
-      await ref.read(subscriptionProvider.notifier).load().timeout(
-            const Duration(seconds: 16),
-          );
+      await subNotifier.load().timeout(const Duration(seconds: 24));
     } catch (e, st) {
       if (kDebugMode) debugPrint('Boot plano/trial: $e\n$st');
+    }
+    final subAfterLoad = ref.read(subscriptionProvider);
+    if (!subAfterLoad.isLicensedPro &&
+        !subAfterLoad.hasActiveSubscription &&
+        !subAfterLoad.isTrialActive) {
+      try {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        await subNotifier.reloadPlanFromServer(force: true).timeout(
+              const Duration(seconds: 20),
+            );
+      } catch (e, st) {
+        if (kDebugMode) debugPrint('Boot retry trial: $e\n$st');
+      }
     }
 
     await _waitMinSplash(started, const Duration(milliseconds: 1400));

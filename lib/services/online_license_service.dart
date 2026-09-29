@@ -110,6 +110,22 @@ class OnlineLicenseService {
 
   }
 
+  /// Várias tentativas — GitHub / rede instável na 1ª abertura após instalar.
+  static Future<bool?> isDeviceTrialUsedOnlineWithRetry({
+    int attempts = 4,
+    bool bustCache = true,
+  }) async {
+    final max = attempts < 1 ? 1 : attempts;
+    for (var i = 0; i < max; i++) {
+      final v = await isDeviceTrialUsedOnline(bustCache: bustCache);
+      if (v != null) return v;
+      if (i < max - 1) {
+        await Future<void>.delayed(Duration(milliseconds: 700 * (i + 1)));
+      }
+    }
+    return null;
+  }
+
 
 
   /// Registra aparelho na lista online (Apps Script → GitHub). Falha silenciosa se URL vazia.
