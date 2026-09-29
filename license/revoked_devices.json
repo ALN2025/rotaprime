@@ -1,5 +1,7 @@
 {
-  "revoked_device_ids": [],
+  "revoked_device_ids": [
+    "3e116e6e679ac2497becb719"
+  ],
   "trial_used_device_ids": [
     "3e116e6e679ac2497becb719",
     "735511f84367a75899af3598",
