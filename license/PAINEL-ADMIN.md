@@ -36,6 +36,7 @@ Use a **mesma senha** do `REGISTER_SECRET` (ex.: a que está no Flutter em `kTri
 
 ### No painel você pode
 
+- Ver **PRO vitalício (chave)** — lista `licensed_pro_devices` no GitHub (app registra ao ativar; ou botão **Registrar PRO vitalício**).
 - Ver **trial já usados** (IDs que não ganham trial de novo).
 - Ver **PRO revogados** (reembolso / mau uso).
 - Colar um ID e clicar **Revogar PRO** ou **Marcar trial já usado**.
@@ -43,6 +44,8 @@ Use a **mesma senha** do `REGISTER_SECRET` (ex.: a que está no Flutter em `kTri
 
 O app lê:  
 https://github.com/ALN2025/rotaprime/blob/main/license/revoked_devices.json
+
+Depois de **Liberar trial**, o celular atualiza **sozinho** (com internet): ao abrir o app, ao voltar do fundo ou a cada ~90 s — sem reinstalar APK. Confira o ID em Configurações → **ID do aparelho** (24 caracteres).
 
 ## 4. App Flutter
 

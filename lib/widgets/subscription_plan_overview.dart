@@ -27,7 +27,8 @@ class SubscriptionPlanOverview extends StatelessWidget {
             children: [
               Text(
                 switch (sub.accessKind) {
-                  PlanAccessKind.licensedPro => 'Seu plano: PRO',
+                  PlanAccessKind.licensedPro => 'Seu plano: ROTA PRIME PRO',
+                  PlanAccessKind.subscriptionPro => 'Seu plano: PRO mensal',
                   PlanAccessKind.trialPro => 'Seu plano: Trial PRO (${sub.trialDaysRemaining}d)',
                   PlanAccessKind.free => 'Seu plano: Grátis',
                 },
@@ -49,7 +50,7 @@ class SubscriptionPlanOverview extends StatelessWidget {
                 icon: Icons.star_outline,
                 color: AppColors.orange,
                 text:
-                    'PRO (pagamento único por aparelho): rotas ilimitadas, otimização, linha laranja, reotimizar, gastos.',
+                    'PRO: rotas ilimitadas, otimização OSRM, linha laranja no mapa e mapa escuro.',
               ),
               const SizedBox(height: 6),
               _bullet(
@@ -65,10 +66,10 @@ class SubscriptionPlanOverview extends StatelessWidget {
                 text:
                     'Suporte: todos usam o WhatsApp; PRO licenciado tem prioridade na fila.',
               ),
-              if (!sub.isLicensedPro) ...[
+              if (!sub.isPro) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'PRO neste aparelho: copie o ID abaixo, envie pelo WhatsApp do suporte e cole a chave recebida.',
+                  'Assine PRO em Configurações (Mercado Pago) e sincronize o plano após o pagamento.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.45),
                     fontSize: 11,

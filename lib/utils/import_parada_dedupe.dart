@@ -53,8 +53,9 @@ ImportDedupeOutcome dedupeImportParadas(List<Parada> input) {
 /// Chave estável para merge (ID do pacote ou endereço — ignora id Isar).
 String mergeParadaDedupeKey(Parada p) {
   final ref = p.spxTn.trim();
-  if (ref.isNotEmpty) return 'id:$ref';
-  return 'addr:${deliveryAddressKey(p)}';
+  final carrier = p.romaneioCarrier.name;
+  if (ref.isNotEmpty) return 'c:$carrier|id:$ref';
+  return 'c:$carrier|addr:${deliveryAddressKey(p)}';
 }
 
 /// Quantos pacotes do arquivo ainda não existem na rota.

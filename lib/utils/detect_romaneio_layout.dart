@@ -2,6 +2,7 @@ import 'package:rota_prime/models/import_romaneio_layout.dart';
 import 'package:rota_prime/services/excel_parser_service.dart';
 import 'package:rota_prime/utils/column_matcher.dart';
 import 'package:rota_prime/utils/import_romaneio_ref.dart';
+import 'package:rota_prime/utils/romaneio_package_order.dart';
 
 /// Define pin vs info após parse do arquivo (PDF ou planilha).
 ImportRomaneioLayout detectRomaneioLayout(
@@ -13,7 +14,13 @@ ImportRomaneioLayout detectRomaneioLayout(
   if (isPdf) {
     final cells = rows.first.cells;
     final hasEntrega = pickExactRomaneioCell(cells, const ['Nº Entrega', 'No Entrega']) != null;
-    final hasIdPacote = pickExactRomaneioCell(cells, const ['ID do Pacote', 'Package ID']) != null;
+    final hasIdPacote = pickExactRomaneioCell(cells, const [
+          'ID do Pacote',
+          'ID Pacote',
+          'Package ID',
+          'ID da Entrega',
+        ]) !=
+        null;
     if (hasIdPacote && !hasEntrega) {
       return ImportRomaneioLayout.pdfRelatorioRj;
     }
@@ -34,9 +41,9 @@ bool _looksLikeShopeeManifest(List<ParsedRow> rows) {
   var withSeq = 0;
   var withTracking = 0;
   for (final row in sample) {
-    final seqRaw = pickExactRomaneioCell(row.cells, explicitSequenceColumnAliases);
-    final n = int.tryParse(seqRaw ?? '');
-    if (n != null && n > 0 && n <= 99999) withSeq++;
+    final seqRaw = pickRomaneioSequenceRaw(row.cells);
+    final order = parseRomaneioSheetOrder(seqRaw, 0);
+    if (order.sequence > 0 && order.sequence <= 99999) withSeq++;
     final track = pickCell(row.cells, spxAliases)?.trim() ?? '';
     if (track.isNotEmpty) withTracking++;
   }

@@ -12,6 +12,8 @@ class Parada {
 
   int sequence = 0;
   int stop = 0;
+  /// Ordem Shopee no romaneio quando vem como `+2` (não cabe em [sequence] inteiro puro).
+  String packageOrderLabel = '';
   String spxTn = '';
   /// Prazo do romaneio (ex.: Loggi `23/09/2026 22:00`).
   String prazoEntrega = '';

@@ -46,34 +46,39 @@ const ParadaSchema = CollectionSchema(
       name: r'ordemExibicao',
       type: IsarType.long,
     ),
-    r'prazoEntrega': PropertySchema(
+    r'packageOrderLabel': PropertySchema(
       id: 9,
+      name: r'packageOrderLabel',
+      type: IsarType.string,
+    ),
+    r'prazoEntrega': PropertySchema(
+      id: 10,
       name: r'prazoEntrega',
       type: IsarType.string,
     ),
     r'quantidadePacotes': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'quantidadePacotes',
       type: IsarType.long,
     ),
-    r'rawLine': PropertySchema(id: 11, name: r'rawLine', type: IsarType.string),
+    r'rawLine': PropertySchema(id: 12, name: r'rawLine', type: IsarType.string),
     r'romaneioCarrier': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'romaneioCarrier',
       type: IsarType.byte,
       enumMap: _ParadaromaneioCarrierEnumValueMap,
     ),
     r'romaneioLayout': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'romaneioLayout',
       type: IsarType.byte,
       enumMap: _ParadaromaneioLayoutEnumValueMap,
     ),
-    r'rotaId': PropertySchema(id: 14, name: r'rotaId', type: IsarType.long),
-    r'sequence': PropertySchema(id: 15, name: r'sequence', type: IsarType.long),
-    r'spxTn': PropertySchema(id: 16, name: r'spxTn', type: IsarType.string),
-    r'stop': PropertySchema(id: 17, name: r'stop', type: IsarType.long),
-    r'zipcode': PropertySchema(id: 18, name: r'zipcode', type: IsarType.string),
+    r'rotaId': PropertySchema(id: 15, name: r'rotaId', type: IsarType.long),
+    r'sequence': PropertySchema(id: 16, name: r'sequence', type: IsarType.long),
+    r'spxTn': PropertySchema(id: 17, name: r'spxTn', type: IsarType.string),
+    r'stop': PropertySchema(id: 18, name: r'stop', type: IsarType.long),
+    r'zipcode': PropertySchema(id: 19, name: r'zipcode', type: IsarType.string),
   },
 
   estimateSize: _paradaEstimateSize,
@@ -100,6 +105,7 @@ int _paradaEstimateSize(
   bytesCount += 3 + object.bairro.length * 3;
   bytesCount += 3 + object.city.length * 3;
   bytesCount += 3 + object.destinationAddress.length * 3;
+  bytesCount += 3 + object.packageOrderLabel.length * 3;
   bytesCount += 3 + object.prazoEntrega.length * 3;
   bytesCount += 3 + object.rawLine.length * 3;
   bytesCount += 3 + object.spxTn.length * 3;
@@ -122,16 +128,17 @@ void _paradaSerialize(
   writer.writeDouble(offsets[6], object.latitude);
   writer.writeDouble(offsets[7], object.longitude);
   writer.writeLong(offsets[8], object.ordemExibicao);
-  writer.writeString(offsets[9], object.prazoEntrega);
-  writer.writeLong(offsets[10], object.quantidadePacotes);
-  writer.writeString(offsets[11], object.rawLine);
-  writer.writeByte(offsets[12], object.romaneioCarrier.index);
-  writer.writeByte(offsets[13], object.romaneioLayout.index);
-  writer.writeLong(offsets[14], object.rotaId);
-  writer.writeLong(offsets[15], object.sequence);
-  writer.writeString(offsets[16], object.spxTn);
-  writer.writeLong(offsets[17], object.stop);
-  writer.writeString(offsets[18], object.zipcode);
+  writer.writeString(offsets[9], object.packageOrderLabel);
+  writer.writeString(offsets[10], object.prazoEntrega);
+  writer.writeLong(offsets[11], object.quantidadePacotes);
+  writer.writeString(offsets[12], object.rawLine);
+  writer.writeByte(offsets[13], object.romaneioCarrier.index);
+  writer.writeByte(offsets[14], object.romaneioLayout.index);
+  writer.writeLong(offsets[15], object.rotaId);
+  writer.writeLong(offsets[16], object.sequence);
+  writer.writeString(offsets[17], object.spxTn);
+  writer.writeLong(offsets[18], object.stop);
+  writer.writeString(offsets[19], object.zipcode);
 }
 
 Parada _paradaDeserialize(
@@ -151,20 +158,21 @@ Parada _paradaDeserialize(
   object.latitude = reader.readDoubleOrNull(offsets[6]);
   object.longitude = reader.readDoubleOrNull(offsets[7]);
   object.ordemExibicao = reader.readLong(offsets[8]);
-  object.prazoEntrega = reader.readString(offsets[9]);
-  object.quantidadePacotes = reader.readLong(offsets[10]);
-  object.rawLine = reader.readString(offsets[11]);
+  object.packageOrderLabel = reader.readString(offsets[9]);
+  object.prazoEntrega = reader.readString(offsets[10]);
+  object.quantidadePacotes = reader.readLong(offsets[11]);
+  object.rawLine = reader.readString(offsets[12]);
   object.romaneioCarrier =
-      _ParadaromaneioCarrierValueEnumMap[reader.readByteOrNull(offsets[12])] ??
+      _ParadaromaneioCarrierValueEnumMap[reader.readByteOrNull(offsets[13])] ??
       RomaneioCarrier.shopee;
   object.romaneioLayout =
-      _ParadaromaneioLayoutValueEnumMap[reader.readByteOrNull(offsets[13])] ??
+      _ParadaromaneioLayoutValueEnumMap[reader.readByteOrNull(offsets[14])] ??
       ImportRomaneioLayout.padrao;
-  object.rotaId = reader.readLong(offsets[14]);
-  object.sequence = reader.readLong(offsets[15]);
-  object.spxTn = reader.readString(offsets[16]);
-  object.stop = reader.readLong(offsets[17]);
-  object.zipcode = reader.readString(offsets[18]);
+  object.rotaId = reader.readLong(offsets[15]);
+  object.sequence = reader.readLong(offsets[16]);
+  object.spxTn = reader.readString(offsets[17]);
+  object.stop = reader.readLong(offsets[18]);
+  object.zipcode = reader.readString(offsets[19]);
   return object;
 }
 
@@ -196,30 +204,32 @@ P _paradaDeserializeProp<P>(
     case 9:
       return (reader.readString(offset)) as P;
     case 10:
-      return (reader.readLong(offset)) as P;
-    case 11:
       return (reader.readString(offset)) as P;
+    case 11:
+      return (reader.readLong(offset)) as P;
     case 12:
+      return (reader.readString(offset)) as P;
+    case 13:
       return (_ParadaromaneioCarrierValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               RomaneioCarrier.shopee)
           as P;
-    case 13:
+    case 14:
       return (_ParadaromaneioLayoutValueEnumMap[reader.readByteOrNull(
                 offset,
               )] ??
               ImportRomaneioLayout.padrao)
           as P;
-    case 14:
-      return (reader.readLong(offset)) as P;
     case 15:
       return (reader.readLong(offset)) as P;
     case 16:
-      return (reader.readString(offset)) as P;
-    case 17:
       return (reader.readLong(offset)) as P;
+    case 17:
+      return (reader.readString(offset)) as P;
     case 18:
+      return (reader.readLong(offset)) as P;
+    case 19:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1104,6 +1114,153 @@ extension ParadaQueryFilter on QueryBuilder<Parada, Parada, QFilterCondition> {
           upper: upper,
           includeUpper: includeUpper,
         ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition>
+  packageOrderLabelGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(
+          include: include,
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.lessThan(
+          include: include,
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.between(
+          property: r'packageOrderLabel',
+          lower: lower,
+          includeLower: includeLower,
+          upper: upper,
+          includeUpper: includeUpper,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition>
+  packageOrderLabelStartsWith(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.startsWith(
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.endsWith(
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelContains(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.contains(
+          property: r'packageOrderLabel',
+          value: value,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition> packageOrderLabelMatches(
+    String pattern, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.matches(
+          property: r'packageOrderLabel',
+          wildcard: pattern,
+          caseSensitive: caseSensitive,
+        ),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition>
+  packageOrderLabelIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.equalTo(property: r'packageOrderLabel', value: ''),
+      );
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterFilterCondition>
+  packageOrderLabelIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(
+        FilterCondition.greaterThan(property: r'packageOrderLabel', value: ''),
       );
     });
   }
@@ -2152,6 +2309,18 @@ extension ParadaQuerySortBy on QueryBuilder<Parada, Parada, QSortBy> {
     });
   }
 
+  QueryBuilder<Parada, Parada, QAfterSortBy> sortByPackageOrderLabel() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'packageOrderLabel', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterSortBy> sortByPackageOrderLabelDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'packageOrderLabel', Sort.desc);
+    });
+  }
+
   QueryBuilder<Parada, Parada, QAfterSortBy> sortByPrazoEntrega() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'prazoEntrega', Sort.asc);
@@ -2394,6 +2563,18 @@ extension ParadaQuerySortThenBy on QueryBuilder<Parada, Parada, QSortThenBy> {
     });
   }
 
+  QueryBuilder<Parada, Parada, QAfterSortBy> thenByPackageOrderLabel() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'packageOrderLabel', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Parada, Parada, QAfterSortBy> thenByPackageOrderLabelDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'packageOrderLabel', Sort.desc);
+    });
+  }
+
   QueryBuilder<Parada, Parada, QAfterSortBy> thenByPrazoEntrega() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'prazoEntrega', Sort.asc);
@@ -2579,6 +2760,17 @@ extension ParadaQueryWhereDistinct on QueryBuilder<Parada, Parada, QDistinct> {
     });
   }
 
+  QueryBuilder<Parada, Parada, QDistinct> distinctByPackageOrderLabel({
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(
+        r'packageOrderLabel',
+        caseSensitive: caseSensitive,
+      );
+    });
+  }
+
   QueryBuilder<Parada, Parada, QDistinct> distinctByPrazoEntrega({
     bool caseSensitive = true,
   }) {
@@ -2706,6 +2898,12 @@ extension ParadaQueryProperty on QueryBuilder<Parada, Parada, QQueryProperty> {
   QueryBuilder<Parada, int, QQueryOperations> ordemExibicaoProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'ordemExibicao');
+    });
+  }
+
+  QueryBuilder<Parada, String, QQueryOperations> packageOrderLabelProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'packageOrderLabel');
     });
   }
 

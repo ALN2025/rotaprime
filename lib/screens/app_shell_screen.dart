@@ -26,6 +26,8 @@ import 'package:rota_prime/widgets/license_revoked_notice.dart';
 
 import 'package:rota_prime/widgets/app_shell_bootstrap.dart';
 
+import 'package:rota_prime/widgets/plan_policy_auto_sync.dart';
+
 
 
 /// Hub principal com rodapé estilo mockup: Mapa · Rotas · Entregas · Mais.
@@ -59,6 +61,8 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
   void initState() {
 
     super.initState();
+
+    _tabBodies[0] = const _MapShellTab();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
 
@@ -150,7 +154,9 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
 
 
 
-    return LicenseRevokedNoticeListener(
+    return PlanPolicyAutoSync(
+
+      child: LicenseRevokedNoticeListener(
 
       child: Scaffold(
 
@@ -302,6 +308,8 @@ class _AppShellScreenState extends ConsumerState<AppShellScreen> {
 
       ),
 
+      ),
+
     );
 
   }
@@ -342,20 +350,19 @@ class _MapShellTabState extends ConsumerState<_MapShellTab>
 
     final paradas = ref.watch(rotaProvider.select((s) => s.paradas));
 
-    final rotaId = ref.watch(rotaProvider.select((s) => s.rotaId ?? 0));
+    final rotaKey = ref.watch(
+      rotaProvider.select((s) => '${s.rotaId ?? 0}_${s.rota?.status.name ?? 'none'}'),
+    );
 
-    if (paradas.isEmpty) {
-
-      return const HomeMapScreen(embeddedInShell: true);
-
-    }
-
-    return RotaAtivaScreen(
-
-      key: ValueKey<int>(rotaId),
-
-      embeddedInShell: true,
-
+    return IndexedStack(
+      index: paradas.isEmpty ? 0 : 1,
+      children: [
+        const HomeMapScreen(embeddedInShell: true),
+        RotaAtivaScreen(
+          key: ValueKey<String>(rotaKey),
+          embeddedInShell: true,
+        ),
+      ],
     );
 
   }

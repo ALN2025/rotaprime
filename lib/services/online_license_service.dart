@@ -114,48 +114,71 @@ class OnlineLicenseService {
 
   /// Registra aparelho na lista online (Apps Script → GitHub). Falha silenciosa se URL vazia.
 
-  static Future<bool> registerTrialUsedDevice(String deviceId) async {
-
-    final url = kTrialRegisterUrl.trim();
-
-    if (url.isEmpty) return false;
-
-    final id = deviceId.trim().toLowerCase();
-
-    if (id.isEmpty) return false;
-
-    try {
-
-      final res = await http
-
-          .post(
-
-            Uri.parse(url),
-
-            headers: {'Content-Type': 'application/json'},
-
-            body: jsonEncode({
-
-              'device_id': id,
-
-              'register_secret': kTrialRegisterSecret,
-
-            }),
-
-          )
-
-          .timeout(const Duration(seconds: 8));
-
-      return res.statusCode >= 200 && res.statusCode < 300;
-
-    } catch (_) {
-
-      return false;
-
-    }
-
+  /// Data ISO 8601 UTC em que o PRO mensal expira (Mercado Pago → GitHub `pro_until`).
+  static Future<DateTime?> fetchProSubscriptionUntil({
+    String? deviceId,
+    bool bustCache = false,
+  }) async {
+    final json = await _fetchDevicePolicyJson(bustCache: bustCache);
+    if (json == null) return null;
+    final map = json['pro_until'];
+    if (map is! Map) return null;
+    final id = (deviceId ?? (await DeviceIdService.hardwareId())).trim().toLowerCase();
+    if (id.isEmpty) return null;
+    final raw = map[id];
+    if (raw is! String || raw.trim().isEmpty) return null;
+    return DateTime.tryParse(raw.trim())?.toUtc();
   }
 
+  static Future<bool> registerTrialUsedDevice(String deviceId) async {
+    return _postRegisterAction(
+      deviceId: deviceId,
+      body: {
+        'device_id': deviceId.trim().toLowerCase(),
+        'register_secret': kTrialRegisterSecret,
+      },
+    );
+  }
+
+  /// Lista no GitHub após ativar chave PRO (painel admin → licensed_pro_devices).
+  static Future<bool> registerLicensedProDevice(
+    String deviceId, {
+    String? buyerName,
+  }) async {
+    final id = deviceId.trim().toLowerCase();
+    if (id.isEmpty) return false;
+    final buyer = buyerName?.trim();
+    return _postRegisterAction(
+      deviceId: id,
+      body: {
+        'action': 'register_licensed_pro',
+        'device_id': id,
+        'register_secret': kTrialRegisterSecret,
+        if (buyer != null && buyer.isNotEmpty) 'buyer': buyer,
+      },
+    );
+  }
+
+  static Future<bool> _postRegisterAction({
+    required String deviceId,
+    required Map<String, dynamic> body,
+  }) async {
+    final url = kTrialRegisterUrl.trim();
+    if (url.isEmpty) return false;
+    if (deviceId.trim().isEmpty) return false;
+    try {
+      final res = await http
+          .post(
+            Uri.parse(url),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 8));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
 

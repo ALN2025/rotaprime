@@ -39,4 +39,16 @@ void main() {
     final b = _p(address: 'Rua C, 20');
     expect(sameDeliveryLocation(a, b), isFalse);
   });
+
+  test('APs diferentes no mesmo numero agrupam', () {
+    final a = _p(
+      address: 'Ana, Rua dos Tangaras, 1839, ap 501',
+      zip: '95010-100',
+    );
+    final b = _p(
+      address: 'Bruno, Rua dos Tangaras, 1839, apto 502 bloco B',
+      zip: '95010-100',
+    );
+    expect(sameDeliveryLocation(a, b), isTrue);
+  });
 }

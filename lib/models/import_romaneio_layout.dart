@@ -3,7 +3,7 @@ enum ImportRomaneioLayout {
   /// Planilha genérica: pin = ordem na rota (1…N).
   padrao,
 
-  /// Shopee: pin e sacola = **ordem do pacote** no romaneio (coluna Sequence).
+  /// Shopee: pin = ordem na rota (1…N); chip/painel = Sequence / `+N` / SPX TN.
   shopeeOrdemPacote,
 
   /// Relatório de entregas (PDF): pin = ordem na rota; info = **ID do pacote**.

@@ -1,0 +1,5 @@
+﻿ROTA PRIME - conferencia do APK (distribuir)
+Versao app: 1.2.8 (build 39)
+Arquivo: ROTA_PRIME.apk
+Bytes: 34622041
+GitHub: https://github.com/ALN2025/rotaprime/releases/download/v1.2.8/ROTA_PRIME.apk

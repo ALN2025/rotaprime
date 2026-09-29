@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/theme.dart';
 import 'package:rota_prime/providers/conta_provider.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
-import 'package:rota_prime/providers/subscription_provider.dart';
 import 'package:rota_prime/screens/mapeamento_colunas_screen.dart';
 import 'package:rota_prime/app/app_navigator.dart';
+import 'package:rota_prime/navigation/route_shell_navigation.dart';
 import 'package:rota_prime/widgets/post_import_romaneio_sheet.dart';
 
 /// Lê a planilha, importa paradas e abre o mapa da rota (sem exigir "Próximo" manual).
@@ -45,14 +47,8 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
         ? 'Lendo PDF e localizando endereços no mapa (pode levar 1–2 min)…'
         : 'Lendo planilha e montando a rota…');
     try {
-      await ref.read(subscriptionProvider.notifier).load();
-      if (!mounted) return;
-      final sub = ref.read(subscriptionProvider);
-      if (sub.isPro) {
-        setState(() => _status = '${sub.planLabel}: importando planilha completa…');
-      }
       await notifier.importFromMapping();
-      ref.invalidate(contaRotasProvider);
+      Future<void>.microtask(() => ref.invalidate(contaRotasProvider));
       if (!mounted) return;
       final imported = ref.read(rotaProvider);
       if (imported.paradas.isEmpty) {
@@ -72,11 +68,22 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
       Navigator.of(context).popUntil((route) => route.isFirst);
       final sheetCtx = rootAppContext ?? context;
       if (!sheetCtx.mounted) return;
-      await showPostImportRomaneioSheet(
-        context: sheetCtx,
-        ref: ref,
-        summary: label,
-        isAdditionalRomaneio: merge.contains('Rota atualizada'),
+      navigateToRouteMap(sheetCtx, ref);
+      if (sheetCtx.mounted) {
+        ScaffoldMessenger.of(sheetCtx).showSnackBar(
+          SnackBar(
+            content: Text(label),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      unawaited(
+        showPostImportRomaneioSheet(
+          context: sheetCtx,
+          ref: ref,
+          summary: label,
+          isAdditionalRomaneio: merge.contains('Rota atualizada'),
+        ),
       );
     } catch (e) {
       final msg = e is StateError ? e.message : e.toString();

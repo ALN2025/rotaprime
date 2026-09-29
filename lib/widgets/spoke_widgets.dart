@@ -232,7 +232,7 @@ class RouteSearchBar extends StatelessWidget {
       onChanged: onChanged,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        hintText: 'Buscar parada na rota',
+        hintText: 'Adicione ou busque',
         hintStyle: const TextStyle(color: Colors.white38),
         prefixIcon: const Icon(Icons.search, color: AppColors.orange),
         suffixIcon: Row(
@@ -241,7 +241,7 @@ class RouteSearchBar extends StatelessWidget {
             if (onScan != null)
               IconButton(
                 onPressed: onScan,
-                icon: const Icon(Icons.document_scanner_outlined, color: AppColors.orange),
+                icon: const Icon(Icons.qr_code_scanner, color: AppColors.orange),
               ),
             IconButton(
               onPressed: onMic,
@@ -322,6 +322,7 @@ class RouteTimelineStop extends StatelessWidget {
     this.isStart = false,
     this.isPause = false,
     this.showPackageOrderIcon = false,
+    this.packageOrderOnIcon,
     this.actions,
   });
 
@@ -335,6 +336,8 @@ class RouteTimelineStop extends StatelessWidget {
   final bool isStart;
   final bool isPause;
   final bool showPackageOrderIcon;
+  /// Nº do pacote Shopee (+N) ao lado do ícone — pin da rota fica em [indexLabel].
+  final String? packageOrderOnIcon;
   final Widget? actions;
 
   @override
@@ -363,9 +366,30 @@ class RouteTimelineStop extends StatelessWidget {
                   Column(
                     children: [
                       if (showPackageOrderIcon)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 2),
-                          child: Icon(Icons.inventory_2_outlined, color: AppColors.orange, size: 16),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.inventory_2_outlined,
+                                color: AppColors.orange,
+                                size: 16,
+                              ),
+                              if (packageOrderOnIcon != null &&
+                                  packageOrderOnIcon!.trim().isNotEmpty) ...[
+                                const SizedBox(width: 3),
+                                Text(
+                                  packageOrderOnIcon!,
+                                  style: const TextStyle(
+                                    color: AppColors.orange,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       Text(
                         indexLabel,
@@ -480,8 +504,25 @@ class OptimizingRouteDialog extends StatefulWidget {
   State<OptimizingRouteDialog> createState() => _OptimizingRouteDialogState();
 }
 
-class _OptimizingRouteDialogState extends State<OptimizingRouteDialog> {
+class _OptimizingRouteDialogState extends State<OptimizingRouteDialog>
+    with SingleTickerProviderStateMixin {
   static const _logoSize = Size(72, 72);
+  late final AnimationController _spin;
+
+  @override
+  void initState() {
+    super.initState();
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -514,16 +555,37 @@ class _OptimizingRouteDialogState extends State<OptimizingRouteDialog> {
             ),
             const SizedBox(height: 28),
             SizedBox(
-              width: _logoSize.width,
-              height: _logoSize.height,
+              width: _logoSize.width + 16,
+              height: _logoSize.height + 16,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  CustomPaint(
-                    size: _logoSize,
-                    painter: _PenroseLogoPainter(),
+                  RotationTransition(
+                    turns: _spin,
+                    child: Icon(
+                      Icons.autorenew_rounded,
+                      size: _logoSize.width + 12,
+                      color: AppColors.orange.withValues(alpha: 0.35),
+                    ),
                   ),
-                  const Icon(Icons.location_on, color: Colors.red, size: 28),
+                  Container(
+                    width: _logoSize.width,
+                    height: _logoSize.height,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.08),
+                      border: Border.all(
+                        color: AppColors.orange.withValues(alpha: 0.55),
+                        width: 2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.map_outlined,
+                      color: AppColors.orange,
+                      size: 34,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -561,33 +623,6 @@ class _OptimizingRouteDialogState extends State<OptimizingRouteDialog> {
       ),
     );
   }
-}
-
-class _PenroseLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    final path = Path()
-      ..moveTo(size.width * 0.5, size.height * 0.08)
-      ..lineTo(size.width * 0.92, size.height * 0.78)
-      ..lineTo(size.width * 0.08, size.height * 0.78)
-      ..close();
-    canvas.drawPath(path, paint);
-    final inner = Paint()
-      ..color = const Color(0xFF1E1E26)
-      ..style = PaintingStyle.fill;
-    final hole = Path()
-      ..moveTo(size.width * 0.5, size.height * 0.28)
-      ..lineTo(size.width * 0.72, size.height * 0.68)
-      ..lineTo(size.width * 0.28, size.height * 0.68)
-      ..close();
-    canvas.drawPath(hole, inner);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 Future<void> showOsrmFailDialog(

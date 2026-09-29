@@ -124,14 +124,12 @@ class CircuitSlidableStopRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!ParadaLabels.routeUsesUnifiedPinOrder(allParadas)) ...[
-                const SizedBox(width: 6),
-                PackageOrderBadge(
-                  parada: parada,
-                  allParadas: allParadas,
-                  compact: !isNextHighlight,
-                ),
-              ],
+              const SizedBox(width: 6),
+              PackageOrderBadge(
+                parada: parada,
+                allParadas: allParadas,
+                compact: !isNextHighlight,
+              ),
             ],
           ),
         ),

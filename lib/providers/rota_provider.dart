@@ -22,6 +22,7 @@ import 'package:rota_prime/services/isar_service.dart';
 import 'package:rota_prime/services/location_service.dart';
 import 'package:rota_prime/services/osrm_service.dart';
 import 'package:rota_prime/services/settings_persistence.dart';
+import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
 import 'package:rota_prime/utils/import_parada_dedupe.dart';
 import 'package:rota_prime/utils/romaneio_import_registry.dart';
 import 'package:rota_prime/utils/manifest_route_order.dart';
@@ -221,11 +222,37 @@ class RotaNotifier extends StateNotifier<RotaState> {
   static const _legRefreshMinMoveMeters = 12.0;
   static const _legOffRouteMeters = 50.0;
   LatLng? _lastLegOrigin;
+  DateTime? _lastImportStatusUi;
   bool get _isPro => _ref.read(subscriptionProvider).isPro;
 
+  /// Plano já veio do boot; evita rede extra no meio da importação (travava a UI).
   Future<bool> _ensureProEntitlementsLoaded() async {
-    await _ref.read(subscriptionProvider.notifier).load();
     return _ref.read(subscriptionProvider).isPro;
+  }
+
+  void _setImportStatus(String message) {
+    final now = DateTime.now();
+    final force =
+        message.contains('Rota pronta') ||
+        message.contains('Rota atualizada') ||
+        message.startsWith('Salvando');
+    if (!force &&
+        _lastImportStatusUi != null &&
+        now.difference(_lastImportStatusUi!) <
+            const Duration(milliseconds: 300)) {
+      return;
+    }
+    _lastImportStatusUi = now;
+    state = state.copyWith(statusMessage: message);
+  }
+
+  void _scheduleBackgroundGeocodeFill() {
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 6), () async {
+        if (state.paradas.isEmpty) return;
+        await fillMissingGeocodesForCurrentRoute();
+      }),
+    );
   }
 
   /// Trial PRO e licença PRO — mesmas funções PRO (otimizar, trecho OSRM, mais próximo).
@@ -266,6 +293,9 @@ class RotaNotifier extends StateNotifier<RotaState> {
 
     var persistRepair = false;
     for (var i = 0; i < paradas.length; i++) {
+      final before = paradas[i].romaneioCarrier;
+      RomaneioCarrierBranding.normalizeLoggiCarriers([paradas[i]]);
+      if (paradas[i].romaneioCarrier != before) persistRepair = true;
       if (paradas[i].ordemExibicao < 1) {
         paradas[i].ordemExibicao = i + 1;
         persistRepair = true;
@@ -421,6 +451,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
         await isar.rotaRecords.delete(id);
       }
     });
+    await RomaneioImportRegistry.clearForRotas(deleteIds);
   }
 
   Future<int?> _latestEmptyDraftId(Isar isar) async {
@@ -519,6 +550,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
       await isar.gastos.filter().rotaIdEqualTo(rotaId).deleteAll();
       await isar.rotaRecords.delete(rotaId);
     });
+    await RomaneioImportRegistry.clearForRota(rotaId);
     if (state.rotaId == rotaId) {
       state = const RotaState();
     }
@@ -533,6 +565,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
       await isar.gastos.filter().rotaIdEqualTo(rotaId).deleteAll();
       await isar.rotaRecords.delete(rotaId);
     });
+    await RomaneioImportRegistry.clearForRota(rotaId);
     state = const RotaState();
   }
 
@@ -541,12 +574,13 @@ class RotaNotifier extends StateNotifier<RotaState> {
   }
 
   /// Grava planilha em cache local (sobrevive ao voltar do seletor do Android).
-  static String _importCacheFileName(String? fileName) {
+  static String _importCacheFileName(String? fileName, Uint8List bytes) {
+    final fp = RomaneioImportRegistry.fingerprint(bytes).substring(0, 12);
     final n = (fileName ?? '').toLowerCase();
-    if (n.endsWith('.csv')) return 'rota_prime_import.csv';
-    if (n.endsWith('.pdf')) return 'rota_prime_import.pdf';
-    if (n.endsWith('.xls')) return 'rota_prime_import.xls';
-    return 'rota_prime_import.xlsx';
+    if (n.endsWith('.csv')) return 'rota_prime_import_$fp.csv';
+    if (n.endsWith('.pdf')) return 'rota_prime_import_$fp.pdf';
+    if (n.endsWith('.xls')) return 'rota_prime_import_$fp.xls';
+    return 'rota_prime_import_$fp.xlsx';
   }
 
   Future<void> setExcelBytesPersisted(Uint8List bytes, {String? fileName}) async {
@@ -554,7 +588,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
     state = state.copyWith(excelBytes: bytes, importFileName: label);
     try {
       final dir = await getTemporaryDirectory();
-      final cache = File('${dir.path}/${_importCacheFileName(label)}');
+      final cache = File('${dir.path}/${_importCacheFileName(label, bytes)}');
       await cache.writeAsBytes(bytes, flush: true);
       state = state.copyWith(pendingImportCachePath: cache.path);
     } catch (_) {
@@ -760,6 +794,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
         .arquivoPlanilhaImportadaEqualTo(name)
         .findAll();
     if (all.length <= 1) return;
+    final removedIds = <int>[];
     await isar.writeTxn(() async {
       for (final r in all) {
         if (r.id == keepRotaId) continue;
@@ -767,8 +802,10 @@ class RotaNotifier extends StateNotifier<RotaState> {
         await isar.paradas.filter().rotaIdEqualTo(r.id).deleteAll();
         await isar.gastos.filter().rotaIdEqualTo(r.id).deleteAll();
         await isar.rotaRecords.delete(r.id);
+        removedIds.add(r.id);
       }
     });
+    await RomaneioImportRegistry.clearForRotas(removedIds);
   }
 
   /// Evita reabrir rota antiga “em andamento” depois de importar planilha nova.
@@ -837,7 +874,12 @@ class RotaNotifier extends StateNotifier<RotaState> {
     List<Parada> paradas;
     try {
       if (await RomaneioImportRegistry.containsFile(rota.id, bytes)) {
-        throw StateError(RomaneioImportRegistry.duplicateFileMessage);
+        final priorStops = await _paradaCountForRota(isar, rota.id);
+        if (priorStops == 0) {
+          await RomaneioImportRegistry.clearForRota(rota.id);
+        } else {
+          throw StateError(RomaneioImportRegistry.duplicateFileMessage);
+        }
       }
       state = state.copyWith(statusMessage: 'Lendo linhas da planilha…');
       final proUnlimited = await _ensureProEntitlementsLoaded();
@@ -848,7 +890,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
         geocode: true,
         onProgress: (p) {
           final suffix = p.total > 0 && p.done >= 0 ? ' (${p.done}/${p.total})' : '';
-          state = state.copyWith(statusMessage: '${p.message}$suffix');
+          _setImportStatus('${p.message}$suffix');
         },
       );
       paradas = imported.paradas;
@@ -861,6 +903,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
       await isar.writeTxn(() async {
         await isar.rotaRecords.delete(rota.id);
       });
+      await RomaneioImportRegistry.clearForRota(rota.id);
       state = state.copyWith(statusMessage: '');
       rethrow;
     }
@@ -897,9 +940,13 @@ class RotaNotifier extends StateNotifier<RotaState> {
     unawaited(stripRouteTraceUnlessProOptimized());
     unawaited(_purgeEmptyDraftRoutes(isar, keepRotaId: rota.id));
     if (ordered.length <= 80) {
-      unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(ordered));
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 18), () {
+          return MapTilePrefetch.prefetchDeviceBasemapForParadas(ordered);
+        }),
+      );
     }
-    unawaited(fillMissingGeocodesForCurrentRoute());
+    _scheduleBackgroundGeocodeFill();
     return rota.id;
   }
 
@@ -942,7 +989,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
         incoming,
         onProgress: (p) {
           final suffix = p.total > 0 && p.done >= 0 ? ' (${p.done}/${p.total})' : '';
-          state = state.copyWith(statusMessage: '${p.message}$suffix');
+          _setImportStatus('${p.message}$suffix');
         },
       );
 
@@ -986,9 +1033,13 @@ class RotaNotifier extends StateNotifier<RotaState> {
         pendingImportCachePath: null,
       );
       if (combined.length <= 80) {
-        unawaited(MapTilePrefetch.prefetchDeviceBasemapForParadas(combined));
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 18), () {
+            return MapTilePrefetch.prefetchDeviceBasemapForParadas(combined);
+          }),
+        );
       }
-      unawaited(fillMissingGeocodesForCurrentRoute());
+      _scheduleBackgroundGeocodeFill();
       return rotaId;
     } catch (e) {
       state = state.copyWith(statusMessage: '');
@@ -1060,20 +1111,24 @@ class RotaNotifier extends StateNotifier<RotaState> {
       return _osrm.optimizeRoute(
         state.paradas,
         startFromDriver: fromDriver,
+        isPro: isPro,
         onProgress: (step, total, message) {
           final now = DateTime.now();
           if (lastProgressUi != null &&
               step < total &&
               now.difference(lastProgressUi!) <
-                  const Duration(milliseconds: 320)) {
+                  const Duration(milliseconds: 160)) {
             return;
           }
           lastProgressUi = now;
           final frac = total > 0 ? (step / total).clamp(0.05, 0.98) : 0.1;
-          state = state.copyWith(
-            statusMessage: optimizeStatusForUser(message, step, total),
-            optimizeProgress: frac,
-          );
+          final msg = optimizeStatusForUser(message, step, total);
+          scheduleMicrotask(() {
+            state = state.copyWith(
+              statusMessage: msg,
+              optimizeProgress: frac,
+            );
+          });
         },
       );
     }
@@ -1189,6 +1244,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
     required String address,
     String? trackingCode,
     int? orderSequence,
+    String packageOrderLabel = '',
     String? zipcode,
     bool? entregaComercial,
     String? geocodeCityHint,
@@ -1252,6 +1308,7 @@ class RotaNotifier extends StateNotifier<RotaState> {
       ..rawLine = trackingCode != null ? '-; -; $trackingCode; $address;' : address
       ..ordemExibicao = n
       ..sequence = seq
+      ..packageOrderLabel = packageOrderLabel.trim()
       ..stop = seq > 0 ? seq : n
       ..entregaComercial = entregaComercial ?? false
       ..romaneioLayout = state.rota?.romaneioLayout ?? ImportRomaneioLayout.padrao;
@@ -1275,6 +1332,8 @@ class RotaNotifier extends StateNotifier<RotaState> {
     required String address,
     String? trackingCode,
     int? orderSequence,
+    String packageOrderLabel = '',
+    bool clearBagOrder = false,
     String? zipcode,
     bool? entregaComercial,
     String? geocodeCityHint,
@@ -1335,9 +1394,18 @@ class RotaNotifier extends StateNotifier<RotaState> {
           ? address
           : '-; -; $trackingCode; $address;';
     }
-    if (orderSequence != null && orderSequence > 0) {
-      parada.sequence = orderSequence;
-      parada.stop = orderSequence;
+    if (clearBagOrder) {
+      parada
+        ..sequence = 0
+        ..packageOrderLabel = ''
+        ..stop = parada.ordemExibicao > 0 ? parada.ordemExibicao : parada.stop;
+    } else if (orderSequence != null && orderSequence > 0) {
+      parada
+        ..sequence = orderSequence
+        ..packageOrderLabel = packageOrderLabel.trim()
+        ..stop = orderSequence;
+    } else if (packageOrderLabel.trim().isNotEmpty) {
+      parada.packageOrderLabel = packageOrderLabel.trim();
     }
     if (entregaComercial != null) {
       parada.entregaComercial = entregaComercial;
@@ -1377,6 +1445,158 @@ class RotaNotifier extends StateNotifier<RotaState> {
       await refreshNavigationLegForActiveTarget(force: true);
     }
     return parada;
+  }
+
+  /// Cópia para testar entregas de novo (nova rota rascunho, paradas zeradas).
+  Future<void> recreateRouteForTesting(int sourceRotaId, {bool reoptimize = false}) async {
+    final isar = await IsarService.instance;
+    final src = await isar.rotaRecords.get(sourceRotaId);
+    if (src == null) {
+      throw StateError('Rota não encontrada.');
+    }
+    final srcParadas = await isar.paradas
+        .filter()
+        .rotaIdEqualTo(sourceRotaId)
+        .sortByOrdemExibicao()
+        .findAll();
+    if (srcParadas.isEmpty) {
+      throw StateError('Esta rota não tem paradas para refazer.');
+    }
+
+    final when = DateTime.now();
+    final rota = RotaRecord()
+      ..titulo = 'Teste · ${src.titulo}'
+      ..ownerEmail = src.ownerEmail
+      ..status = RotaStatus.rascunho
+      ..valorPago = src.valorPago
+      ..kmInicial = 0
+      ..criadaEm = when
+      ..pacotesImportados = src.pacotesImportados
+      ..paradasImportadas = src.paradasImportadas
+      ..romaneioLayout = src.romaneioLayout
+      ..arquivoPlanilhaImportada = src.arquivoPlanilhaImportada
+      ..otimizada = false
+      ..duracaoMinutos = 0
+      ..distanciaKm = 0;
+
+    await isar.writeTxn(() async {
+      await isar.rotaRecords.put(rota);
+    });
+    await RomaneioImportRegistry.clearForRota(rota.id);
+
+    final clones = <Parada>[];
+    for (final p in srcParadas) {
+      final c = _cloneParada(p)..rotaId = rota.id;
+      clones.add(c);
+    }
+    _renumberParadas(clones);
+    rota
+      ..pacotesImportados = RouteDeliveryStats.totalPackages(clones)
+      ..paradasImportadas = RouteDeliveryStats.totalStops(clones);
+
+    await isar.writeTxn(() async {
+      await isar.paradas.putAll(clones);
+      await isar.rotaRecords.put(rota);
+    });
+
+    await loadRota(rota.id);
+    if (reoptimize) {
+      try {
+        await optimizeRoute(isPro: _isPro);
+      } catch (_) {
+        await applySpreadsheetOrderOnly(force: true);
+      }
+    } else {
+      await applySpreadsheetOrderOnly(force: true);
+    }
+  }
+
+  Parada _cloneParada(Parada src) {
+    return Parada()
+      ..rotaId = src.rotaId
+      ..sequence = src.sequence
+      ..packageOrderLabel = src.packageOrderLabel
+      ..stop = src.stop
+      ..spxTn = src.spxTn
+      ..prazoEntrega = src.prazoEntrega
+      ..destinationAddress = src.destinationAddress
+      ..bairro = src.bairro
+      ..city = src.city
+      ..zipcode = src.zipcode
+      ..latitude = src.latitude
+      ..longitude = src.longitude
+      ..rawLine = src.rawLine
+      ..quantidadePacotes = src.quantidadePacotes
+      ..entregaComercial = src.entregaComercial
+      ..romaneioLayout = src.romaneioLayout
+      ..romaneioCarrier = src.romaneioCarrier
+      ..entregue = false
+      ..falha = false;
+  }
+
+  void _renumberParadas(List<Parada> list) {
+    for (var i = 0; i < list.length; i++) {
+      list[i].ordemExibicao = i + 1;
+    }
+  }
+
+  Future<void> _clearOptimizedRouteIfNeeded() async {
+    final rota = state.rota;
+    if (rota == null || rota.otimizada != true) return;
+    rota
+      ..otimizada = false
+      ..rotaGeometriaJson = null;
+    final isar = await IsarService.instance;
+    await isar.writeTxn(() async {
+      await isar.rotaRecords.put(rota);
+    });
+    _lastLegOrigin = null;
+    state = state.copyWith(
+      rota: rota,
+      routePoints: const [],
+      navigationLegPoints: const [],
+    );
+  }
+
+  Future<Parada?> duplicateParada(int paradaId) async {
+    final idx = state.paradas.indexWhere((p) => p.id == paradaId);
+    if (idx < 0) return null;
+    if (!_isPro && state.paradas.length >= PlanLimits.freeMaxDeliveriesPerRoute) {
+      state = state.copyWith(
+        statusMessage: PlanLimits.manualAddBlockedMessage(state.paradas.length),
+      );
+      return null;
+    }
+    final dup = _cloneParada(state.paradas[idx]);
+    final list = [...state.paradas]..insert(idx + 1, dup);
+    _renumberParadas(list);
+    final isar = await IsarService.instance;
+    await isar.writeTxn(() async {
+      await isar.paradas.putAll(list);
+    });
+    await _clearOptimizedRouteIfNeeded();
+    state = state.copyWith(paradas: list, statusMessage: '');
+    return dup;
+  }
+
+  Future<bool> removeParada(int paradaId) async {
+    if (state.paradas.every((p) => p.id != paradaId)) return false;
+    final isar = await IsarService.instance;
+    final list = state.paradas.where((p) => p.id != paradaId).toList();
+    _renumberParadas(list);
+    await isar.writeTxn(() async {
+      await isar.paradas.delete(paradaId);
+      if (list.isNotEmpty) {
+        await isar.paradas.putAll(list);
+      }
+    });
+    await _clearOptimizedRouteIfNeeded();
+    state = state.copyWith(
+      paradas: list,
+      statusMessage: '',
+      clearNavigationTarget: state.navigationTargetParadaId == paradaId,
+    );
+    return true;
   }
 
   Future<Parada?> addParadaFromQr(String spx, String endereco) async {
@@ -1746,12 +1966,18 @@ class RotaNotifier extends StateNotifier<RotaState> {
       return null;
     }
 
-    if (from == null) {
-      state = state.copyWith(navigationTargetParadaId: next.id);
+    state = state.copyWith(navigationTargetParadaId: next.id);
+
+    if (sameDeliveryLocation(parada, next)) {
+      state = state.copyWith(navigationLegPoints: const []);
       return next;
     }
 
-    await _drawLegToParada(next, from);
+    if (from == null) {
+      return next;
+    }
+
+    unawaited(_drawLegToParada(next, from));
     return next;
   }
 

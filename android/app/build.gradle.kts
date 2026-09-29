@@ -1,8 +1,18 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val mapsKeyProperties = Properties()
+val mapsKeyFile = rootProject.file("maps-key.properties")
+if (mapsKeyFile.exists()) {
+    mapsKeyFile.inputStream().use { stream -> mapsKeyProperties.load(stream) }
+}
+val googleMapsApiKey =
+    mapsKeyProperties.getProperty("GOOGLE_MAPS_API_KEY")?.trim().orEmpty()
 
 android {
     namespace = "com.rotaprime.rota_prime"
@@ -21,6 +31,7 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))

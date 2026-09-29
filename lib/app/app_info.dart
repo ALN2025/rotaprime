@@ -5,8 +5,11 @@ class AppInfo {
   static const brandLine = 'ALN SYSTEM';
   static const productName = 'ROTA PRIME';
   /// Mantenha alinhado ao `version:` do pubspec.yaml.
-  static const displayVersion = '1.2.3';
-  static const buildNumber = '33';
+  static const displayVersion = '1.2.7';
+  static const buildNumber = '38';
   static const shortVersionLabel = 'v$displayVersion';
   static const fullVersionLabel = 'Versão $displayVersion (build $buildNumber)';
+
+  /// Rodapé de configurações — estilo Spoke (ex.: Spoke-v3.68.15).
+  static const settingsVersionLine = '$productName-v$displayVersion';
 }

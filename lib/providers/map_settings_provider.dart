@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/map_basemap.dart';
+import 'package:rota_prime/providers/subscription_provider.dart';
 import 'package:rota_prime/services/settings_persistence.dart';
 
 enum NavAppPreference { wazeFirst, googleMapsFirst, askEachTime }
@@ -13,6 +14,7 @@ enum StopIdDisplay { modernByRoute, numericOnly }
 class MapSettingsState {
   const MapSettingsState({
     this.basemap = MapBasemap.streets,
+    this.basemapUserPicked = false,
     this.avoidTolls = true,
     this.navBubble = true,
     this.themeDark = true,
@@ -24,6 +26,8 @@ class MapSettingsState {
   });
 
   final MapBasemap basemap;
+  /// Usuário escolheu Ruas/Escuro no menu de camadas (trial e PRO pagos).
+  final bool basemapUserPicked;
   final bool avoidTolls;
   final bool navBubble;
   final bool themeDark;
@@ -58,6 +62,7 @@ class MapSettingsState {
 
   MapSettingsState copyWith({
     MapBasemap? basemap,
+    bool? basemapUserPicked,
     bool? avoidTolls,
     bool? navBubble,
     bool? themeDark,
@@ -69,6 +74,7 @@ class MapSettingsState {
   }) {
     return MapSettingsState(
       basemap: basemap ?? this.basemap,
+      basemapUserPicked: basemapUserPicked ?? this.basemapUserPicked,
       avoidTolls: avoidTolls ?? this.avoidTolls,
       navBubble: navBubble ?? this.navBubble,
       themeDark: themeDark ?? this.themeDark,
@@ -93,15 +99,44 @@ class MapSettingsNotifier extends StateNotifier<MapSettingsState> {
   void _persistLater() => Future.microtask(() => persistAllSettings(_ref));
 
   void applyFromStorage(MapSettingsState saved) {
-    final basemap = saved.basemap == MapBasemap.standard
-        ? MapBasemap.streets
-        : saved.basemap;
-    state = saved.copyWith(basemap: basemap);
+    state = saved.copyWith(basemap: MapBasemap.normalizeSaved(saved.basemap));
   }
 
-  void setBasemap(MapBasemap value) {
-    state = state.copyWith(basemap: value);
+  void setBasemap(MapBasemap value, {bool userInitiated = true}) {
+    state = state.copyWith(
+      basemap: MapBasemap.normalizeSaved(value),
+      basemapUserPicked: userInitiated ? true : state.basemapUserPicked,
+    );
     _persistLater();
+  }
+
+  /// Volta para Ruas se o plano não inclui mapa escuro.
+  void clampToPlanAccess(bool isPro) {
+    final fixed = MapBasemap.effectiveForPlan(state.basemap, isPro: isPro);
+    if (fixed != state.basemap) {
+      state = state.copyWith(basemap: fixed);
+      _persistLater();
+    }
+  }
+
+  /// Grátis: só Ruas. Trial: mantém escolha. PRO licenciado/mensal: Escuro padrão até o usuário mudar.
+  void syncBasemapWithPlan(SubscriptionState sub) {
+    switch (sub.accessKind) {
+      case PlanAccessKind.free:
+        clampToPlanAccess(false);
+        return;
+      case PlanAccessKind.trialPro:
+        clampToPlanAccess(true);
+        return;
+      case PlanAccessKind.licensedPro:
+      case PlanAccessKind.subscriptionPro:
+        clampToPlanAccess(true);
+        if (!state.basemapUserPicked && state.basemap != MapBasemap.dark) {
+          state = state.copyWith(basemap: MapBasemap.dark);
+          _persistLater();
+        }
+        return;
+    }
   }
 
   void setAvoidTolls(bool value) {

@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/theme.dart';
-import 'package:rota_prime/navigation/route_shell_navigation.dart';
 import 'package:rota_prime/services/spreadsheet_picker.dart';
 
 /// Após importar PDF/planilha: mapa ou somar mais romaneios na mesma rota.
@@ -11,6 +12,14 @@ Future<void> showPostImportRomaneioSheet({
   required String summary,
   required bool isAdditionalRomaneio,
 }) async {
+  unawaited(
+    Future<void>.delayed(const Duration(milliseconds: 2400), () {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+    }),
+  );
+
   await showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.sheet,
@@ -79,15 +88,16 @@ Future<void> showPostImportRomaneioSheet({
               const SizedBox(height: 20),
               Text(
                 isAdditionalRomaneio
-                    ? 'Pode somar mais PDFs ou planilhas na mesma rota. Pacotes repetidos são ignorados.'
-                    : 'Trabalha com mais de um romaneio? Magalog, Loggi, Shopee… tudo na mesma rota.',
+                    ? 'Pins no mapa: 1, 2, 3… na ordem da rota. '
+                        'IDs e sequência (Shopee, Magalog, Loggi) ficam na lista e no painel.'
+                    : 'Vários romaneios na mesma rota (Magalog, Loggi, Shopee…). '
+                        'No mapa: pins 1…N. Na entrega: código e ordem de cada transportadora.',
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.65), height: 1.45),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  navigateToRouteMap(context, ref);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.orange,
@@ -104,7 +114,6 @@ Future<void> showPostImportRomaneioSheet({
               OutlinedButton.icon(
                 onPressed: () async {
                   Navigator.pop(ctx);
-                  navigateToRouteMap(context, ref);
                   await pickSpreadsheetAndMergeIntoRoute(ref);
                 },
                 icon: const Icon(Icons.library_add_outlined),

@@ -11,8 +11,12 @@ class OfflineFirstTileProvider extends TileProvider {
     required this.basemap,
     this.labelsOverlay = false,
     this.labelOverlayIndex = 0,
+    this.preferNetwork = false,
     super.headers,
   });
+
+  /// Rotas grandes: evita existsSync no disco a cada tile (zoom/pan travava).
+  final bool preferNetwork;
 
   static const _tileHeaders = {
     'User-Agent':
@@ -38,14 +42,42 @@ class OfflineFirstTileProvider extends TileProvider {
 
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
-    final path = _localPath(coordinates);
-    if (path != null) {
-      final file = File(path);
-      if (file.existsSync()) {
-        return FileImage(file);
+    if (!preferNetwork) {
+      final path = _localPath(coordinates);
+      if (path != null) {
+        final file = File(path);
+        if (file.existsSync() && _isValidMapTileFile(file)) {
+          return FileImage(file);
+        }
+        if (file.existsSync()) {
+          try {
+            file.deleteSync();
+          } catch (_) {}
+        }
       }
     }
     return _network.getImage(coordinates, options);
+  }
+
+  static bool _isValidMapTileFile(File file) {
+    try {
+      final len = file.lengthSync();
+      if (len < 600) return false;
+      if (len < 8) return false;
+      final raf = file.openSync(mode: FileMode.read);
+      try {
+        final head = raf.readSync(4);
+        return head.length == 4 &&
+            head[0] == 0x89 &&
+            head[1] == 0x50 &&
+            head[2] == 0x4E &&
+            head[3] == 0x47;
+      } finally {
+        raf.closeSync();
+      }
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

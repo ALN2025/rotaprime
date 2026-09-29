@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/theme.dart';
 import 'package:rota_prime/models/parada.dart';
+import 'package:rota_prime/app/app_navigator.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
 import 'package:rota_prime/providers/subscription_provider.dart';
 import 'package:rota_prime/services/speech_permission.dart';
@@ -10,6 +11,7 @@ import 'package:rota_prime/services/geocode_service.dart';
 import 'package:rota_prime/services/viacep_service.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 import 'package:rota_prime/utils/manual_address_format.dart';
+import 'package:rota_prime/utils/romaneio_package_order.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 Future<Parada?> showManualParadaDialog(
@@ -19,9 +21,10 @@ Future<Parada?> showManualParadaDialog(
   bool startVoiceInput = false,
   Parada? editing,
 }) {
+  final ctx = rootAppContext ?? context;
   return showDialog<Parada?>(
-    context: context,
-    builder: (ctx) => _ManualParadaDialog(
+    context: ctx,
+    builder: (dialogCtx) => _ManualParadaDialog(
       initialQuery: initialQuery,
       startVoiceInput: startVoiceInput,
       editing: editing,
@@ -88,7 +91,11 @@ class _ManualParadaDialogState extends ConsumerState<_ManualParadaDialog> {
       _cityCtrl.text = parsed.city;
       _complementCtrl.text = parsed.complement ?? '';
       _codeCtrl.text = p.spxTn;
-      if (p.sequence > 0) _orderCtrl.text = p.sequence.toString();
+      if (p.packageOrderLabel.trim().isNotEmpty) {
+        _orderCtrl.text = p.packageOrderLabel.trim();
+      } else if (p.sequence > 0) {
+        _orderCtrl.text = p.sequence.toString();
+      }
       _tipoComercial = p.entregaComercial;
     } else {
       _addressCtrl.text = widget.initialQuery?.trim() ?? '';
@@ -322,7 +329,10 @@ class _ManualParadaDialogState extends ConsumerState<_ManualParadaDialog> {
     setState(() => _saving = true);
     final code = _codeCtrl.text.trim();
     final orderRaw = _orderCtrl.text.trim();
-    final orderSeq = int.tryParse(orderRaw);
+    final bagOrder = parseManualBagOrder(orderRaw);
+    final orderSeq = bagOrder.sequence;
+    final bagLabel = bagOrder.displayLabel;
+    final clearBagOrder = orderRaw.isEmpty;
     final probe = Parada()..destinationAddress = address;
     final comercial = _tipoComercial ?? isBusinessDelivery(probe);
     final neighborhood = !isPro ? _bairroCtrl.text.trim() : _cepData?.bairro;
@@ -336,6 +346,8 @@ class _ManualParadaDialogState extends ConsumerState<_ManualParadaDialog> {
               address: address,
               trackingCode: code.isEmpty ? null : code,
               orderSequence: orderSeq,
+              packageOrderLabel: bagLabel,
+              clearBagOrder: clearBagOrder,
               zipcode: mode == _ManualAddressMode.cep ? _cepData?.cep : null,
               entregaComercial: comercial,
               geocodeCityHint: cityHint,
@@ -346,6 +358,7 @@ class _ManualParadaDialogState extends ConsumerState<_ManualParadaDialog> {
               address: address,
               trackingCode: code.isEmpty ? null : code,
               orderSequence: orderSeq,
+              packageOrderLabel: bagLabel,
               zipcode: mode == _ManualAddressMode.cep ? _cepData?.cep : null,
               entregaComercial: comercial,
               geocodeCityHint: cityHint,
@@ -683,12 +696,12 @@ class _ManualParadaDialogState extends ConsumerState<_ManualParadaDialog> {
             TextField(
               controller: _orderCtrl,
               enabled: !_saving,
-              keyboardType: TextInputType.number,
+              keyboardType: TextInputType.text,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
                 labelText: 'Ordem na sacola (opcional)',
                 labelStyle: TextStyle(color: Colors.white70),
-                hintText: 'Ex.: 47 — deixe vazio se for pacote ++ (extra na rota)',
+                hintText: 'Ex.: 47 ou +2 (Shopee) — vazio = ++ só no app',
                 hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
               ),
             ),

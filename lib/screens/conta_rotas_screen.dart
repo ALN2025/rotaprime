@@ -12,6 +12,7 @@ import 'package:rota_prime/navigation/route_shell_navigation.dart';
 import 'package:rota_prime/widgets/add_parada_sheet.dart';
 import 'package:rota_prime/widgets/continue_delivery_banner.dart';
 import 'package:rota_prime/services/spreadsheet_picker.dart';
+import 'package:rota_prime/widgets/support_overflow_menu.dart';
 
 Future<void> openSavedRouteFromList(
   BuildContext context,
@@ -103,29 +104,7 @@ class ContaRotasScreen extends ConsumerWidget {
                   else
                     const SizedBox(width: 8),
                   const Spacer(),
-                  IconButton(
-                    onPressed: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: AppColors.sheet,
-                          title: const Text('Ajuda', style: TextStyle(color: Colors.white)),
-                          content: const Text(
-                            'Importe a planilha, otimize, entregue e finalize. '
-                            'Rotas finalizadas ficam salvas por data nesta lista.',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.help_outline, color: Colors.white70),
-                  ),
+                  const SupportOverflowMenu(),
                   IconButton(
                     onPressed: () {
                       Navigator.of(context).push(

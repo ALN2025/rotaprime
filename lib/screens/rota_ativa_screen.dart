@@ -3,10 +3,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map/flutter_map.dart' show LatLngBounds;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:rota_prime/app/map_basemap.dart';
+import 'package:rota_prime/app/map_performance.dart';
 import 'package:rota_prime/app/theme.dart';
+import 'package:rota_prime/services/clustering_service.dart';
+import 'package:rota_prime/services/map_pin_icon_cache.dart';
+import 'package:rota_prime/utils/parada_map_markers.dart';
+import 'package:rota_prime/utils/route_map_stamp.dart';
 import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/models/rota.dart';
 import 'package:rota_prime/services/map_tile_prefetch.dart';
@@ -16,7 +22,6 @@ import 'package:rota_prime/widgets/route_planning_action_bar.dart';
 import 'package:rota_prime/providers/map_settings_provider.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
 import 'package:rota_prime/providers/subscription_provider.dart';
-import 'package:rota_prime/screens/finalizar_rota_screen.dart';
 import 'package:rota_prime/screens/route_delivery_ledger_screen.dart';
 import 'package:rota_prime/navigation/route_shell_navigation.dart';
 import 'package:rota_prime/providers/app_shell_provider.dart';
@@ -26,10 +31,13 @@ import 'package:rota_prime/widgets/delivery_cockpit_overlay.dart';
 import 'package:rota_prime/widgets/delivery_run_menu_sheet.dart';
 import 'package:rota_prime/widgets/map_layers_sheet.dart';
 import 'package:rota_prime/widgets/stop_action_panel.dart';
+import 'package:rota_prime/utils/rota_map_controller.dart';
 import 'package:rota_prime/widgets/route_map.dart';
+import 'package:rota_prime/widgets/same_address_map_alert.dart';
 import 'package:rota_prime/widgets/spoke_widgets.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 import 'package:rota_prime/utils/parada_packages.dart';
+import 'package:rota_prime/utils/manifest_route_order.dart';
 import 'package:rota_prime/utils/stop_route_order.dart';
 import 'package:rota_prime/utils/map_screen_layout.dart';
 import 'package:rota_prime/utils/route_delivery_stats.dart';
@@ -37,7 +45,9 @@ import 'package:rota_prime/utils/navigation_parada_utils.dart';
 import 'package:rota_prime/widgets/circuit_active_stop_list.dart';
 import 'package:rota_prime/widgets/delivery_map_legend.dart';
 import 'package:rota_prime/widgets/circuit_view_toggle.dart';
+import 'package:rota_prime/app/app_navigator.dart';
 import 'package:rota_prime/widgets/add_parada_sheet.dart';
+import 'package:rota_prime/widgets/route_finalize_flow.dart';
 
 class RotaAtivaScreen extends ConsumerStatefulWidget {
   const RotaAtivaScreen({super.key, this.embeddedInShell = false});
@@ -49,13 +59,15 @@ class RotaAtivaScreen extends ConsumerStatefulWidget {
 }
 
 class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => widget.embeddedInShell;
   /// Mapa já montado nesta sessão — evita recarregar tudo ao voltar do Waze.
   static int? _mapSessionRotaId;
 
   static const _distance = Distance();
 
-  final _mapController = MapController();
+  final _mapController = RotaMapController();
   final _stopDockMeasureKey = GlobalKey();
   static const _stopDockCollapsedHeight = 40.0;
   bool _stopDockExpanded = false;
@@ -81,29 +93,48 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   Timer? _providerDriverSync;
   Timer? _routeClockTimer;
   bool _optimized = false;
+  bool _deliveryInProgress = false;
+  bool _mapEverShown = false;
+  late final Map<String, TextStyle> _pinIconStyles;
+  List<ClusterMapPoint> _clusterSource = [];
+  List<MapPinCluster>? _viewportClusters;
+  Object? _lastClusterParadasStamp;
+  bool _isRefreshingViewport = false;
+
+  bool _viewportCullEnabled(int n) => n > MapPerformance.heavyStopCount;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final pinIcons = MapPinIconCache()..preload();
+    _pinIconStyles = pinIcons.cache;
     final rota = ref.read(rotaProvider).rota;
     final status = rota?.status;
     final rotaId = ref.read(rotaProvider).rotaId;
+    final stopCount = ref.read(rotaProvider).paradas.length;
     if (status == RotaStatus.finalizada) {
       _view = CircuitDeliveryView.list;
       _mapPrimed = true;
+      _mapEverShown = true;
       _mapSessionRotaId = rotaId;
       _optimized = rota?.otimizada == true;
       _followGps = false;
       _followHeading = false;
       _drivingMode = false;
     } else if (status == RotaStatus.rascunho) {
-      _mapPrimed = true;
       _mapSessionRotaId = rotaId;
       _followGps = false;
       _followHeading = false;
       _drivingMode = false;
       _optimized = rota?.otimizada == true;
+      if (stopCount >= MapPerformance.listFirstStopCount) {
+        _view = CircuitDeliveryView.list;
+        _mapEverShown = false;
+      } else {
+        _mapEverShown = true;
+        _mapPrimed = true;
+      }
     }
     _routeClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -118,8 +149,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
         return;
       }
       if (status == RotaStatus.rascunho) {
-        if (!ref.read(subscriptionProvider).isPro &&
-            ref.read(rotaProvider).paradas.isNotEmpty) {
+        final paradas = ref.read(rotaProvider).paradas;
+        if (paradas.isNotEmpty &&
+            !ref.read(subscriptionProvider).isPro &&
+            !paradasMatchManifestOrder(paradas)) {
           unawaited(ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly(force: false));
         }
         unawaited(ref.read(rotaProvider.notifier).stripRouteTraceUnlessProOptimized());
@@ -311,7 +344,12 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     setState(() => _stopDockExpanded = !_stopDockExpanded);
     if (_stopDockExpanded && !_mapLocked) {
       final stop = refocus ??
-          _focusedStop(ref.read(rotaProvider), ref.read(rotaProvider).paradas);
+          _focusedStop(
+            paradas: ref.read(rotaProvider).paradas,
+            navigationTargetParadaId:
+                ref.read(rotaProvider).navigationTargetParadaId,
+            driverPosition: ref.read(rotaProvider).driverPosition,
+          );
       if (stop != null) {
         _scheduleStopDockMeasure(stop.id);
         _scheduleMapFocusOnParada(stop);
@@ -321,10 +359,8 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     }
   }
 
-  void _openFinalizarRota() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FinalizarRotaScreen()),
-    );
+  Future<void> _openFinalizarRota() async {
+    await runSpokStyleRouteFinishFlow(context, ref);
   }
 
   void _openDeliveryMenu() {
@@ -351,7 +387,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   }
 
   Future<void> _primeMapView() async {
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
     if (!mounted) return;
 
     final state = ref.read(rotaProvider);
@@ -377,13 +413,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     if (points.isEmpty) return;
 
     if (points.length >= 2) {
-      final bounds = LatLngBounds.fromPoints(points);
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: bounds,
-          padding: const EdgeInsets.fromLTRB(48, 100, 48, 280),
-          maxZoom: 16,
-        ),
+      await _mapController.fitBounds(
+        LatLngBounds.fromPoints(points),
+        padding: const EdgeInsets.fromLTRB(48, 100, 48, 280),
+        maxZoom: 16,
       );
     } else {
       _mapController.move(points.first, 15);
@@ -398,6 +431,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     _providerDriverSync?.cancel();
     _legRefreshDebounce?.cancel();
     _routeClockTimer?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -421,10 +455,13 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       barrierDismissible: false,
       builder: (ctx) => Consumer(
         builder: (context, ref, _) {
-          final st = ref.watch(rotaProvider);
+          final statusMessage =
+              ref.watch(rotaProvider.select((s) => s.statusMessage));
+          final progress =
+              ref.watch(rotaProvider.select((s) => s.optimizeProgress));
           return OptimizingRouteDialog(
-            statusMessage: st.statusMessage,
-            progress: st.optimizeProgress,
+            statusMessage: statusMessage,
+            progress: progress,
           );
         },
       ),
@@ -462,9 +499,9 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     );
     if (!mounted) return;
     setState(() {
-      _manualTargetLock = true;
-      _followGps = false;
-      _followHeading = false;
+      _manualTargetLock = false;
+      _followGps = true;
+      _followHeading = _drivingMode;
     });
     final isProAfter = ref.read(subscriptionProvider).isPro;
     final first = RotaNotifier.activeNavigationParadaFrom(
@@ -484,6 +521,110 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
         content: Text('Rota iniciada. Toque no cadeado para travar o mapa no alvo, ou no GPS para seguir você.'),
       ),
     );
+  }
+
+  void _rebuildClusterSource(List<Parada> paradas) {
+    final reps = representativeParadasForMap(paradas, hideCompleted: false);
+    final pts = buildMapMarkerDisplayPoints(paradas);
+    final labels = ParadaLabels.mapPinDisplayLabelsForRepresentatives(paradas, reps);
+    _clusterSource = [
+      for (final p in reps)
+        if (p.latitude != null && p.longitude != null)
+          ClusterMapPoint(
+            paradaId: p.id,
+            latitude: pts[p.id]?.latitude ?? p.latitude!,
+            longitude: pts[p.id]?.longitude ?? p.longitude!,
+            pinLabel: labels[p.id] ?? ParadaLabels.mapPinDisplayLabel(paradas, p),
+          ),
+    ];
+    if (_viewportCullEnabled(paradas.length)) {
+      _viewportClusters = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refreshViewportMarkers();
+      });
+    } else {
+      _viewportClusters = null;
+    }
+  }
+
+  void _syncClusterSourceIfNeeded(List<Parada> paradas) {
+    final stamp = routeMapParadasStamp(paradas);
+    if (stamp == _lastClusterParadasStamp) return;
+    _lastClusterParadasStamp = stamp;
+    _rebuildClusterSource(paradas);
+  }
+
+  void _refreshViewportMarkers() {
+    unawaited(_refreshViewportMarkersAsync());
+  }
+
+  Future<void> _refreshViewportMarkersAsync() async {
+    if (_isRefreshingViewport) return;
+    final paradas = ref.read(rotaProvider).paradas;
+    if (!mounted || !_viewportCullEnabled(paradas.length)) {
+      if (_viewportClusters != null && mounted) {
+        setState(() => _viewportClusters = null);
+      }
+      return;
+    }
+    if (_clusterSource.isEmpty) return;
+    _isRefreshingViewport = true;
+    try {
+      final bounds = await _mapController.visibleBoundsAsync();
+      if (bounds == null) return;
+      final visible = filtrarPorBounds(
+        _clusterSource,
+        south: bounds.south,
+        north: bounds.north,
+        west: bounds.west,
+        east: bounds.east,
+      ).toList();
+      final clusters = clusterizar(visible);
+      if (mounted) setState(() => _viewportClusters = clusters);
+    } finally {
+      _isRefreshingViewport = false;
+    }
+  }
+
+  Future<void> _ensureMapPaneReady() async {
+    if (!_mapEverShown && mounted) {
+      setState(() => _mapEverShown = true);
+    }
+    _syncClusterSourceIfNeeded(ref.read(rotaProvider).paradas);
+    if (!_mapPrimed) {
+      await _primeMapView();
+      if (mounted) setState(() => _mapPrimed = true);
+    } else {
+      final paradas = ref.read(rotaProvider).paradas;
+      if (paradas.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(
+            _mapController.fitToParadas(
+              paradas,
+              ultraFast: paradas.length >= MapPerformance.listFirstStopCount,
+            ),
+          );
+        });
+      }
+    }
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshViewportMarkers());
+  }
+
+  void _onDeliveryViewChanged(CircuitDeliveryView v) {
+    if (v == CircuitDeliveryView.map) {
+      _goToMapView();
+      return;
+    }
+    setState(() => _view = v);
+  }
+
+  void _goToMapView() {
+    if (_view != CircuitDeliveryView.map && mounted) {
+      setState(() => _view = CircuitDeliveryView.map);
+    }
+    unawaited(_ensureMapPaneReady());
   }
 
   Widget _buildTopBar({
@@ -521,7 +662,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
         builder: (_) => RouteDeliveryLedgerScreen(
           onOpenOnMap: (p) {
             Navigator.of(context).pop();
-            setState(() => _view = CircuitDeliveryView.map);
+            _goToMapView();
             _openParada(p, focusMapOnPin: true);
           },
         ),
@@ -607,13 +748,17 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   }
 
   void _syncNavigationCamera(LatLng pos, double heading) {
-    final h = MediaQuery.of(context).size.height;
     if (_followGps && !_mapLocked) {
-      _mapController.move(
-        pos,
-        _driveZoom,
-        offset: Offset(0, h * 0.22),
+      unawaited(
+        _mapController.followDriver(
+          pos,
+          zoom: _driveZoom,
+          headingDegrees: heading,
+          rotateWithHeading: _followHeading && _drivingMode,
+          tilt: _drivingMode && _followHeading ? 45 : 0,
+        ),
       );
+      return;
     }
     if (_followHeading && _drivingMode) {
       _mapController.rotate(-heading);
@@ -664,9 +809,9 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     final padding = EdgeInsets.fromLTRB(36, top + 20, 36, dock + 52);
 
     if (points.length == 1) {
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: _paddedBoundsAround(pin, radiusMeters: 120),
+      unawaited(
+        _mapController.fitBounds(
+          _paddedBoundsAround(pin, radiusMeters: 120),
           padding: padding,
           maxZoom: 17,
         ),
@@ -679,9 +824,9 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
           bounds = _paddedBoundsAround(pin, radiusMeters: 140);
         }
       }
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: bounds,
+      unawaited(
+        _mapController.fitBounds(
+          bounds,
           padding: padding,
           maxZoom: 17.5,
         ),
@@ -720,26 +865,37 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       }
       return;
     }
-    for (final ms in const [80, 200, 400, 650, 950]) {
+    for (final ms in const [60, 160, 320]) {
       Future<void>.delayed(Duration(milliseconds: ms), focus);
     }
   }
 
-  Future<void> _focusNextDelivery(Parada next, {Parada? afterDelivered}) async {
+  Future<void> _focusNextDelivery(
+    Parada next, {
+    Parada? afterDelivered,
+    bool sameAddress = false,
+  }) async {
     setState(() {
       _selectedParadaId = next.id;
-      _manualTargetLock = false;
+      _manualTargetLock = true;
+      _stopDockExpanded = true;
     });
     if (!next.entregue && !next.falha) {
-      await ref.read(rotaProvider.notifier).selectNavigationTarget(next.id);
+      await ref.read(rotaProvider.notifier).selectNavigationTarget(
+            next.id,
+            awaitLegRefresh: !sameAddress,
+          );
     }
     if (!mounted) return;
     _expandStopSheet(stopId: next.id);
-    _scheduleMapFocusOnParada(next);
+    if (sameAddress) {
+      _fitOrCenterOnSelectedParada(next);
+    } else {
+      _scheduleMapFocusOnParada(next, settleCamera: false);
+      ScaffoldMessenger.of(context).clearSnackBars();
+    }
     if (afterDelivered != null && sameDeliveryStop(afterDelivered, next)) {
       _notifySameStopRemainingPackage(next);
-    } else {
-      ScaffoldMessenger.of(context).clearSnackBars();
     }
   }
 
@@ -753,7 +909,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 2),
         backgroundColor: AppColors.orange,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
@@ -798,16 +954,37 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   }
 
   Future<void> _completeDelivery(Parada delivered) async {
-    final next = await ref.read(rotaProvider.notifier).markEntregue(
-          delivered.id,
-          entregue: true,
-          falha: false,
+    if (_deliveryInProgress) return;
+    _deliveryInProgress = true;
+    try {
+      final before = ref.read(rotaProvider).paradas;
+      final siblings = pendingSiblingsAtSameStop(before, delivered);
+      final sameAddress = siblings.isNotEmpty;
+      if (sameAddress) {
+        setState(() {
+          _selectedParadaId = siblings.first.id;
+          _manualTargetLock = true;
+          _stopDockExpanded = true;
+        });
+      }
+
+      final next = await ref.read(rotaProvider.notifier).markEntregue(
+            delivered.id,
+            entregue: true,
+            falha: false,
+          );
+      if (!mounted) return;
+      if (next != null) {
+        await _focusNextDelivery(
+          next,
+          afterDelivered: delivered,
+          sameAddress: sameAddress || sameDeliveryStop(delivered, next),
         );
-    if (!mounted) return;
-    if (next != null) {
-      await _focusNextDelivery(next, afterDelivered: delivered);
-    } else {
-      setState(() => _selectedParadaId = null);
+      } else {
+        setState(() => _selectedParadaId = null);
+      }
+    } finally {
+      _deliveryInProgress = false;
     }
   }
 
@@ -822,7 +999,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   }
 
   Future<void> _addParadaToRoute() async {
-    final added = await openManualParadaFlow(context, ref);
+    final added = await showAddParadaOptionsSheet(
+      rootAppContext ?? context,
+      ref,
+    );
     if (!mounted || added == null) return;
     unawaited(_openParada(added));
     final isPro = ref.read(subscriptionProvider).isPro;
@@ -848,7 +1028,19 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       );
   }
 
-  Future<void> _openParada(Parada p, {bool focusMapOnPin = true}) async {
+  Future<void> _openParada(
+    Parada p, {
+    bool focusMapOnPin = true,
+    bool fromMapPin = false,
+  }) async {
+    if (fromMapPin) {
+      await showSameAddressDeliveriesAlertIfNeeded(
+        context,
+        all: ref.read(rotaProvider).paradas,
+        tapped: p,
+      );
+      if (!mounted) return;
+    }
     setState(() {
       _selectedParadaId = p.id;
       _manualTargetLock = true;
@@ -872,15 +1064,24 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     _mapController.rotate(0);
   }
 
-  Parada? _focusedStop(RotaState state, List<Parada> paradas) {
+  Parada? _focusedStop({
+    required List<Parada> paradas,
+    required int? navigationTargetParadaId,
+    required LatLng? driverPosition,
+  }) {
     final sel = _selectedParadaId;
     if (sel != null) {
       for (final p in paradas) {
         if (p.id == sel) return p;
       }
     }
+    final navState = ref.read(rotaProvider).copyWith(
+          paradas: paradas,
+          navigationTargetParadaId: navigationTargetParadaId,
+          driverPosition: driverPosition,
+        );
     return RotaNotifier.activeNavigationParadaFrom(
-          state,
+          navState,
           isPro: ref.read(subscriptionProvider).isPro,
         ) ??
         RotaNotifier.nextPendingParada(paradas);
@@ -904,7 +1105,12 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
 
     final messenger = ScaffoldMessenger.of(context);
     if (_mapLocked && !wasLocked) {
-      final current = _focusedStop(ref.read(rotaProvider), ref.read(rotaProvider).paradas);
+      final st = ref.read(rotaProvider);
+      final current = _focusedStop(
+        paradas: st.paradas,
+        navigationTargetParadaId: st.navigationTargetParadaId,
+        driverPosition: st.driverPosition,
+      );
       if (current != null) {
         unawaited(_syncLegToFocusedStop(current));
       }
@@ -956,13 +1162,42 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     });
   }
 
+  void _onRouteLoadedFromProvider(RotaStatus? status) {
+    if (status == RotaStatus.finalizada) {
+      setState(() {
+        _view = CircuitDeliveryView.list;
+        _mapPrimed = true;
+        _mapEverShown = true;
+        _followGps = false;
+        _followHeading = false;
+        _drivingMode = false;
+        _optimized = ref.read(rotaProvider).rota?.otimizada == true;
+      });
+      _mapSessionRotaId = ref.read(rotaProvider).rotaId;
+      _syncClusterSourceIfNeeded(ref.read(rotaProvider).paradas);
+      return;
+    }
+    if (status == RotaStatus.rascunho) {
+      final n = ref.read(rotaProvider).paradas.length;
+      setState(() {
+        _followGps = false;
+        _followHeading = false;
+        _drivingMode = false;
+        if (n >= MapPerformance.listFirstStopCount) {
+          _view = CircuitDeliveryView.list;
+          _mapEverShown = false;
+        }
+      });
+    }
+  }
+
   void _consumeMapFocusRequest(int focusId) {
     ref.read(mapFocusParadaIdProvider.notifier).state = null;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       for (final p in ref.read(rotaProvider).paradas) {
         if (p.id == focusId) {
-          setState(() => _view = CircuitDeliveryView.map);
+          _goToMapView();
           await _openParada(p, focusMapOnPin: true);
           break;
         }
@@ -972,24 +1207,48 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     ref.listen<int?>(mapFocusParadaIdProvider, (prev, focusId) {
       if (focusId != null) _consumeMapFocusRequest(focusId);
     });
+    ref.listen<(int?, RotaStatus?)>(
+      rotaProvider.select((s) => (s.rotaId, s.rota?.status)),
+      (prev, next) {
+        if (prev == null || prev.$1 != next.$1 || prev.$2 != next.$2) {
+          _onRouteLoadedFromProvider(next.$2);
+        }
+      },
+    );
 
-    final state = ref.watch(rotaProvider);
+    final rota = ref.watch(rotaProvider.select((s) => s.rota));
+    final paradas = ref.watch(rotaProvider.select((s) => s.paradas));
+    final allowManualAdd =
+        ref.watch(rotaProvider.select((s) => s.allowManualParadaEntry));
+    final routeActiveSince =
+        ref.watch(rotaProvider.select((s) => s.routeActiveSince));
+    final driverPosition =
+        ref.watch(rotaProvider.select((s) => s.driverPosition));
+    final driverHeading =
+        ref.watch(rotaProvider.select((s) => s.driverHeading));
+    final navigationLegPoints =
+        ref.watch(rotaProvider.select((s) => s.navigationLegPoints));
+    final navigationTargetParadaId = ref.watch(
+      rotaProvider.select((s) => s.navigationTargetParadaId),
+    );
+
     final isPro = ref.watch(subscriptionProvider).isPro;
-    final routeOptimized = state.rota?.otimizada == true;
+    final routeOptimized = rota?.otimizada == true;
     final showFullRouteTrace = isPro && routeOptimized;
-    var basemap = ref.watch(mapSettingsProvider).basemap;
-    final paradas = state.paradas;
-    final allowManualAdd = state.allowManualParadaEntry;
-    final imported = state.rota?.pacotesImportados ?? 0;
+    var basemap = MapBasemap.effectiveForPlan(
+      ref.watch(mapSettingsProvider).basemap,
+      isPro: isPro,
+    );
+    final imported = rota?.pacotesImportados ?? 0;
     final packagesTotal = RouteDeliveryStats.packageDenominator(
       paradas,
       importedTotal: imported > 0 ? imported : null,
     );
     final packagesDone = RouteDeliveryStats.finishedPackages(paradas);
-    final rota = state.rota;
     final routeActive = rota?.status == RotaStatus.ativa;
     final estimatedMinutes = rota?.duracaoMinutos ?? 0;
     final dur = rota?.duracaoMinutos ?? 0;
@@ -1001,43 +1260,34 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     final showPlanningBar = rota != null && rota.status == RotaStatus.rascunho;
     final showPlanningBarOnList =
         showPlanningBar && !allDeliveriesFinished;
-    final current = _focusedStop(state, paradas);
+    final current = _focusedStop(
+      paradas: paradas,
+      navigationTargetParadaId: navigationTargetParadaId,
+      driverPosition: driverPosition,
+    );
     final previousStop = current != null ? RotaNotifier.previousInRouteOrder(paradas, current) : null;
     final nextInRoute = current != null
         ? RotaNotifier.nextPendingInRouteOrderAfter(paradas, current)
         : null;
+    _syncClusterSourceIfNeeded(paradas);
+    final heavyMap = paradas.length > MapPerformance.heavyStopCount;
     final multiStopsOnMap = paradas.length > 1;
     final pinRouteFocus = _manualTargetLock && _selectedParadaId != null;
-    final showFullOptimizedPolyline =
-        showFullRouteTrace && !pinRouteFocus;
+    // Tarja laranja: só trecho até o pin alvo (mais próximo ou escolhido), não a rota inteira.
     final showNavLegPolyline =
-        isPro && (routeActive || pinRouteFocus);
+        showFullRouteTrace && (routeActive || pinRouteFocus || current != null);
 
-    if (_view == CircuitDeliveryView.list) {
-      final listBody = Scaffold(
-          backgroundColor: AppColors.background,
-          body: DeliveryCockpitOverlay(
-            child: Column(
+    final listPane = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildTopBar(
-                    view: _view,
-                    onViewChanged: (v) => setState(() => _view = v),
-                    packagesDone: packagesDone,
-                    packagesTotal: packagesTotal,
-                    routeActive: routeActive,
-                    routeActiveSince: state.routeActiveSince,
-                    estimatedMinutes: estimatedMinutes,
-                    allowManualAdd: allowManualAdd,
-                  ),
                   Expanded(
                     child: CircuitActiveStopList(
                       paradas: paradas,
                       activeParadaId: current?.id,
-                      driverPosition: state.driverPosition,
+                      driverPosition: driverPosition,
                       listModeAllDone: allDeliveriesFinished,
                       onTapStop: (p) {
-                        setState(() => _view = CircuitDeliveryView.map);
+                        _goToMapView();
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (!mounted) return;
                           _openParada(p, focusMapOnPin: true);
@@ -1143,47 +1393,46 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
                       SizedBox(height: MediaQuery.paddingOf(context).bottom + 10),
                   ],
                 ],
-              ),
-            ),
-          );
-      return _wrapShellPop(listBody);
-    }
+              );
 
-    final mapBody = Scaffold(
-      backgroundColor: AppColors.background,
-      body: DeliveryCockpitOverlay(
-        child: Stack(
+    final mapPane = Stack(
         children: [
           Positioned.fill(
-            child: RouteMap(
+            child: RepaintBoundary(
+              child: RouteMap(
+              key: ValueKey<String>('route_map_${basemap.name}'),
               paradas: paradas,
               interactive: !_mapLocked,
-              routePoints:
-                  showFullOptimizedPolyline ? state.routePoints : const [],
+              routePoints: const [],
               navigationLegPoints: showNavLegPolyline
-                  ? state.navigationLegPoints
+                  ? navigationLegPoints
                   : const [],
-              allowRoutePolylines:
-                  showFullOptimizedPolyline || showNavLegPolyline,
-              driverPosition: _liveDriverPosition ?? state.driverPosition,
+              allowRoutePolylines: showNavLegPolyline,
+              driverPosition: _liveDriverPosition ?? driverPosition,
               driverHeading: _liveDriverPosition != null
                   ? _liveDriverHeading
-                  : state.driverHeading,
+                  : driverHeading,
               navigationView: _drivingMode,
-              legRouteOnly: showNavLegPolyline &&
-                  !(showFullOptimizedPolyline && state.routePoints.length >= 2),
+              legRouteOnly: showNavLegPolyline,
               mapRotationDegrees: 0,
               selectedParadaId: _manualTargetLock
                   ? (_selectedParadaId ?? current?.id)
                   : (current?.id ?? _selectedParadaId),
-              mapController: _mapController,
-              onParadaTap: (p) => _openParada(p, focusMapOnPin: true),
+              rotaMapController: _mapController,
+              onParadaTap: (p) => _openParada(p, focusMapOnPin: true, fromMapPin: true),
               onUserMapGesture: _onUserMapGesture,
+              onCameraMove: heavyMap ? _refreshViewportMarkers : null,
+              onCameraIdle: heavyMap ? _refreshViewportMarkers : null,
               basemap: basemap,
               initialZoom: 15,
               showStopCallouts: false,
               fastTileLayer: true,
+              lightweightMarkers: heavyMap,
+              networkTilesOnly: heavyMap,
               hideCompletedStops: false,
+              viewportClusters: heavyMap ? _viewportClusters : null,
+              pinIconStyles: heavyMap ? _pinIconStyles : null,
+            ),
             ),
           ),
           Positioned(
@@ -1220,16 +1469,6 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
                 ),
               ],
             ),
-          ),
-          _buildTopBar(
-            view: _view,
-            onViewChanged: (v) => setState(() => _view = v),
-            packagesDone: packagesDone,
-            packagesTotal: packagesTotal,
-            routeActive: routeActive,
-            routeActiveSince: state.routeActiveSince,
-            estimatedMinutes: estimatedMinutes,
-            allowManualAdd: allowManualAdd,
           ),
           if (showPlanningBar)
             Positioned(
@@ -1269,10 +1508,39 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
               ),
             ),
         ],
+    );
+
+    return _wrapShellPop(
+      Scaffold(
+        backgroundColor: AppColors.background,
+        body: DeliveryCockpitOverlay(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTopBar(
+                view: _view,
+                onViewChanged: _onDeliveryViewChanged,
+                packagesDone: packagesDone,
+                packagesTotal: packagesTotal,
+                routeActive: routeActive,
+                routeActiveSince: routeActiveSince,
+                estimatedMinutes: estimatedMinutes,
+                allowManualAdd: allowManualAdd,
+              ),
+              Expanded(
+                child: _view == CircuitDeliveryView.list
+                    ? listPane
+                    : (_mapEverShown || _mapPrimed
+                        ? mapPane
+                        : const Center(
+                            child: CircularProgressIndicator(color: AppColors.orange),
+                          )),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    return _wrapShellPop(mapBody);
   }
 
   Widget _buildActiveStopDock({
@@ -1288,7 +1556,17 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       _scheduleStopDockMeasure(stop.id);
     }
 
-    final actionPanel = reviewDone
+    final pendingSameStop = pendingSiblingsAtSameStop(paradas, stop);
+    final showReviewOnly = reviewDone && pendingSameStop.isEmpty;
+
+    final peekNext = () {
+      if (!multiStopsOnMap) return null;
+      if (pendingSameStop.isNotEmpty) return null;
+      if (ParadaLabels.hasMultiplePackagesAtStop(paradas, stop)) return null;
+      return nextInRoute;
+    }();
+
+    final actionPanel = showReviewOnly
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -1314,10 +1592,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
               ),
               const SizedBox(height: 10),
               StopAddressPeekCard(
-                peek: StopRouteAddressPeek.fromParadas(
+                peek:               StopRouteAddressPeek.fromParadas(
                   paradas,
                   stop,
-                  next: multiStopsOnMap ? nextInRoute : null,
+                  next: peekNext,
                 ),
               ),
               const SizedBox(height: 10),
@@ -1344,7 +1622,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
             routePeek: StopRouteAddressPeek.fromParadas(
               paradas,
               stop,
-              next: multiStopsOnMap ? nextInRoute : null,
+              next: peekNext,
             ),
             onPrevious: !multiStopsOnMap || previousStop == null
                 ? null
@@ -1353,7 +1631,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
                 ? null
                 : () => _skipToNextFocus(nextInRoute),
             onFailed: () => _failDelivery(stop),
-            onDelivered: () => _markEntregueOk(stop),
+            onDelivered: _deliveryInProgress ? () {} : () => _markEntregueOk(stop),
           );
 
     final dockBody = Material(

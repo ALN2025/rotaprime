@@ -76,13 +76,13 @@ class _ListenSearchDialogState extends State<_ListenSearchDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.sheet,
-      title: const Text('Buscar na rota', style: TextStyle(color: Colors.white)),
+      title: const Text('Falar endereço ou buscar', style: TextStyle(color: Colors.white)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            _listening ? 'Fale endereço, código ou bairro…' : _text,
+            _listening ? 'Fale o endereço, rua, código ou bairro…' : _text,
             style: TextStyle(
               color: _text.isEmpty ? Colors.white54 : Colors.white,
               fontSize: 16,

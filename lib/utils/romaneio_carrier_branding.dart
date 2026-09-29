@@ -6,7 +6,16 @@ import 'package:rota_prime/models/romaneio_carrier.dart';
 class RomaneioCarrierBranding {
   RomaneioCarrierBranding._();
 
+  /// PDF Loggi (Relatório + coluna Prazo) — selo igual Magalog/SPX.
+  static bool isLikelyLoggiParada(Parada p) {
+    if (p.romaneioCarrier == RomaneioCarrier.loggi) return true;
+    if (p.romaneioLayout != ImportRomaneioLayout.pdfRelatorioRj) return false;
+    if (p.prazoEntrega.trim().isNotEmpty) return true;
+    return p.rawLine.toLowerCase().contains('loggi');
+  }
+
   static RomaneioCarrier carrierOf(Parada p) {
+    if (isLikelyLoggiParada(p)) return RomaneioCarrier.loggi;
     switch (p.romaneioCarrier) {
       case RomaneioCarrier.protocoloCarregamento:
         return RomaneioCarrier.magalog;
@@ -14,13 +23,18 @@ class RomaneioCarrierBranding {
         if (p.romaneioLayout == ImportRomaneioLayout.pdfProtocoloEntrega) {
           return RomaneioCarrier.magalog;
         }
-        if (p.romaneioLayout == ImportRomaneioLayout.pdfRelatorioRj &&
-            p.prazoEntrega.trim().contains(':')) {
-          return RomaneioCarrier.loggi;
-        }
         return RomaneioCarrier.generico;
       default:
         return p.romaneioCarrier;
+    }
+  }
+
+  /// Corrige paradas antigas salvas como RJ/genérico apesar de serem Loggi.
+  static void normalizeLoggiCarriers(Iterable<Parada> paradas) {
+    for (final p in paradas) {
+      if (isLikelyLoggiParada(p)) {
+        p.romaneioCarrier = RomaneioCarrier.loggi;
+      }
     }
   }
 
@@ -99,6 +113,6 @@ class RomaneioCarrierBranding {
         RomaneioCarrier.generico => const Color(0xFF757575),
       };
 
-  /// Pin = ordem do pacote Shopee; demais = ordem na rota (1…N).
-  static bool pinUsesRouteOrder(RomaneioCarrier c) => c != RomaneioCarrier.shopee;
+  /// Pin no mapa = ordem na rota (1…N) para todas as transportadoras.
+  static bool pinUsesRouteOrder(RomaneioCarrier c) => true;
 }

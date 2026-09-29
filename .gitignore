@@ -48,8 +48,11 @@ app.*.map.json
 /android/app/release
 /release/*.apk
 /demo-pc/node_modules/
+# Servidor local (legado) — app não usa; recriar se precisar backend no futuro
+/servidor/
 
 # Local / sensível — não versionar
+android/maps-key.properties
 .gradle-user-home/
 **/token*trial*.txt
 build_log*.txt

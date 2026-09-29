@@ -22,7 +22,7 @@ class CarrierDeliveryBadge extends StatelessWidget {
 
     final asset = RomaneioCarrierBranding.logoAssetPath(carrier);
     final height = compact ? 22.0 : 26.0;
-    final maxWidth = compact ? 76.0 : 92.0;
+    final maxWidth = compact ? 88.0 : 100.0;
     final label = RomaneioCarrierBranding.displayName(carrier);
     final color = RomaneioCarrierBranding.accent(carrier);
 

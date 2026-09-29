@@ -3,8 +3,8 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:rota_prime/app/map_performance.dart';
 import 'package:rota_prime/models/parada.dart';
-
 class OsrmOptimizationResult {
   OsrmOptimizationResult({
     required this.orderedStops,
@@ -38,7 +38,7 @@ class OsrmService {
   /// Mais pontos por trecho = menos idas ao servidor (importante em 4G).
   static const _routeMax = 45;
   static const _tableMax = 70;
-  static const _minGapMs = 280;
+  static const _minGapMs = 175;
   static const _maxRetries = 4;
 
   final http.Client _http = http.Client();
@@ -48,6 +48,7 @@ class OsrmService {
     List<Parada> paradas, {
     LatLng? startFromDriver,
     OptimizeProgressCallback? onProgress,
+    required bool isPro,
   }) async {
     final withCoords = paradas
         .where((p) => p.latitude != null && p.longitude != null)
@@ -81,7 +82,25 @@ class OsrmService {
         ? await _optimizeOrderFromDriver(startFromDriver, withCoords, progress)
         : await _optimizeOrderOsrm(withCoords, progress);
 
-    progress('OSRM: calculando trajeto (${orderedCoords.length} pontos)…');
+    final n = orderedCoords.length;
+    if (n > MapPerformance.maxStopsFullPolyline) {
+      progress('OSRM: ordem pronta ($n paradas — linha leve no mapa)…');
+      var totalM = 0.0;
+      for (var i = 0; i < n - 1; i++) {
+        totalM += _haversineMeters(orderedCoords[i], orderedCoords[i + 1]);
+      }
+      final pts = orderedCoords
+          .map((p) => LatLng(p.latitude!, p.longitude!))
+          .toList();
+      return OsrmOptimizationResult(
+        orderedStops: [...orderedCoords, ...withoutCoords],
+        durationMinutes: (totalM / 450).round().clamp(1, 999999),
+        distanceKm: totalM / 1000,
+        routePoints: pts,
+      );
+    }
+
+    progress('OSRM: calculando trajeto ($n pontos)…');
     final geometryOrigin = startFromDriver ??
         (orderedCoords.isNotEmpty
             ? LatLng(orderedCoords.first.latitude!, orderedCoords.first.longitude!)
@@ -433,7 +452,7 @@ class OsrmService {
     var totalDuration = 0.0;
     var totalDistance = 0.0;
 
-    const batchSize = 2;
+    const batchSize = 3;
     for (var s = 0; s < segments.length; s += batchSize) {
       final end = math.min(s + batchSize, segments.length);
       progress('OSRM route trecho ${s + 1}-$end/${segments.length}');

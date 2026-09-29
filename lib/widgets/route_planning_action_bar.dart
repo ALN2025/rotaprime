@@ -13,10 +13,12 @@ class RoutePlanningActionBar extends StatelessWidget {
     required this.onRefine,
     required this.durationLabel,
     this.onAddManual,
+    this.optimizing = false,
   });
 
   final bool optimized;
   final bool isPro;
+  final bool optimizing;
   final VoidCallback onOptimize;
   final VoidCallback onUseImportOrder;
   final VoidCallback onStart;
@@ -171,10 +173,21 @@ class RoutePlanningActionBar extends StatelessWidget {
           const SizedBox(height: 10),
         ],
         ElevatedButton.icon(
-          onPressed: onOptimize,
-          icon: Icon(isPro ? Icons.auto_graph_rounded : Icons.lock_outline, size: 22),
+          onPressed: optimizing ? null : onOptimize,
+          icon: optimizing
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(isPro ? Icons.auto_graph_rounded : Icons.lock_outline, size: 22),
           label: Text(
-            isPro ? 'OTIMIZAR ROTA' : 'OTIMIZAR ROTA (PRO)',
+            optimizing
+                ? 'OTIMIZANDO…'
+                : (isPro ? 'OTIMIZAR ROTA' : 'OTIMIZAR ROTA (PRO)'),
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.3),
           ),
           style: primaryOrangeButtonStyle(

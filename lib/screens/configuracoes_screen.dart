@@ -10,6 +10,7 @@ import 'package:rota_prime/providers/map_settings_provider.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
 
 import 'package:rota_prime/providers/subscription_provider.dart';
+import 'package:rota_prime/utils/plan_sync_feedback.dart';
 
 import 'package:rota_prime/screens/compare_plans_screen.dart';
 
@@ -26,9 +27,12 @@ import 'package:rota_prime/widgets/device_id_settings_tile.dart';
 
 import 'package:rota_prime/widgets/map_layers_sheet.dart';
 
+import 'package:rota_prime/app/map_basemap.dart';
 import 'package:rota_prime/app/app_info.dart';
 import 'package:rota_prime/config/plan_limits.dart';
+import 'package:rota_prime/widgets/internal_license_dialog.dart';
 import 'package:rota_prime/widgets/pro_gate.dart';
+import 'package:rota_prime/widgets/pro_subscription_pay_buttons.dart';
 
 
 
@@ -47,6 +51,7 @@ class ConfiguracoesScreen extends ConsumerStatefulWidget {
 
 
 class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
+  int _versionTapCount = 0;
 
   void _saved(String message) {
 
@@ -504,7 +509,11 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
 
             title: const Text('Tipo de mapa', style: TextStyle(color: Colors.white)),
 
-            subtitle: Text(settings.basemap.label, style: const TextStyle(color: AppColors.muted)),
+            subtitle: Text(
+              '${MapBasemap.effectiveForPlan(settings.basemap, isPro: sub.isPro).userChoiceLabel} (Google) · '
+              'mapa escuro = PRO · trial ${PlanLimits.proTrialDays} dias libera tudo',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
 
             trailing: const Icon(Icons.layers_outlined, color: AppColors.orange),
 
@@ -590,7 +599,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
             const ListTile(
               title: Text('Iniciar rota no GPS', style: TextStyle(color: Colors.white54)),
               subtitle: Text(
-                'Recurso PRO — ative a licença para otimizar com GPS',
+                'Recurso PRO — assine ou sincronize o plano para otimizar com GPS',
                 style: TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ),
@@ -600,22 +609,29 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
           _subscriptionPlanSpecCard(sub),
 
           DeviceIdSettingsTile(
-            onCopied: () => _saved('ID copiado — envie pelo WhatsApp do suporte para receber a chave'),
+            onCopied: () => _saved('ID copiado — necessário para assinar PRO (Mercado Pago)'),
           ),
+
+          if (!sub.isPro || sub.accessKind == PlanAccessKind.free)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: ProSubscriptionPayButtons(),
+            ),
 
           ListTile(
             title: const Text('Sincronizar plano / trial', style: TextStyle(color: Colors.white)),
             subtitle: const Text(
-              'Use depois de liberar trial no suporte (mesmo ID acima). '
-              'Desinstalar + reinstalar também consulta a lista online.',
+              'O app sincroniza sozinho ao abrir/voltar (lista online). '
+              'Toque aqui para forçar agora, se acabou de liberar trial no painel.',
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
             trailing: const Icon(Icons.sync, color: AppColors.orange),
             onTap: () async {
-              await ref.read(subscriptionProvider.notifier).reloadPlanFromServer();
+              await ref.read(subscriptionProvider.notifier).reloadPlanFromServer(force: true);
               if (!mounted) return;
-              final s = ref.read(subscriptionProvider);
-              _saved('Plano atualizado: ${s.planLabel}');
+              final msg = await planSyncSnackBarMessage(ref);
+              if (!mounted) return;
+              _saved(msg);
             },
           ),
 
@@ -631,11 +647,13 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
             trailing: Icon(
               switch (sub.accessKind) {
                 PlanAccessKind.licensedPro => Icons.verified,
+                PlanAccessKind.subscriptionPro => Icons.payments_outlined,
                 PlanAccessKind.trialPro => Icons.hourglass_top_rounded,
                 PlanAccessKind.free => Icons.lock_open_outlined,
               },
               color: switch (sub.accessKind) {
                 PlanAccessKind.licensedPro => AppColors.orange,
+                PlanAccessKind.subscriptionPro => AppColors.orange,
                 PlanAccessKind.trialPro => const Color(0xFF5EEAD4),
                 PlanAccessKind.free => Colors.white38,
               },
@@ -663,14 +681,17 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
 
           ),
 
-          if (sub.isLicensedPro)
-
+          if (sub.accessKind == PlanAccessKind.subscriptionPro)
             ListTile(
-
-              title: const Text('Cancelar assinatura', style: TextStyle(color: Colors.red)),
-
+              title: const Text(
+                'Cancelar PRO mensal (local)',
+                style: TextStyle(color: Colors.red),
+              ),
+              subtitle: const Text(
+                'Para parar cobrança, cancele também no Mercado Pago.',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
               onTap: _confirmCancelPro,
-
             ),
 
           ListTile(
@@ -751,11 +772,18 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
           const DevSignatureBadge(),
 
           ListTile(
-
             title: const Text('Versão', style: TextStyle(color: Colors.white)),
-
-            subtitle: Text(AppInfo.fullVersionLabel, style: const TextStyle(color: AppColors.muted)),
-
+            subtitle: Text(
+              AppInfo.settingsVersionLine,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            onTap: () {
+              _versionTapCount++;
+              if (_versionTapCount >= 7) {
+                _versionTapCount = 0;
+                showInternalLicenseDialog(context, ref);
+              }
+            },
           ),
 
           const SizedBox(height: 24),
@@ -797,7 +825,8 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
               const SizedBox(height: 6),
               Text(
                 switch (sub.accessKind) {
-                  PlanAccessKind.licensedPro => 'Seu plano: PRO (licença neste aparelho)',
+                  PlanAccessKind.licensedPro => 'Seu plano: ROTA PRIME PRO',
+                  PlanAccessKind.subscriptionPro => 'Seu plano: PRO mensal (Mercado Pago)',
                   PlanAccessKind.trialPro =>
                     'Seu plano: Trial PRO (${sub.trialDaysRemaining} dia${sub.trialDaysRemaining == 1 ? '' : 's'} restantes)',
                   PlanAccessKind.free => 'Seu plano: Grátis',
@@ -825,7 +854,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                 const SizedBox(height: 6),
                 Text(
                   'Trial encerrado neste aparelho (7 dias usados ou app reinstalado). '
-                  'Plano Grátis ativo. Para PRO de novo, use a chave de licença.',
+                  'Plano Grátis ativo. Para PRO de novo, assine em Mercado Pago e sincronize.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.45),
                     fontSize: 11,
@@ -845,21 +874,20 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
               _planSpecLine(false, 'Otimização OSRM e linha laranja no mapa'),
               _planSpecLine(false, 'Reotimizar rota e gastos do dia (PRO)'),
               const SizedBox(height: 10),
-              const Text(
-                'PRO — pagamento único por aparelho',
-                style: TextStyle(color: AppColors.orange, fontWeight: FontWeight.w700, fontSize: 13),
+              Text(
+                'PRO — R\$ ${PlanLimits.proMonthlyPriceBrl.toStringAsFixed(0)}/mês (cartão ou Pix)',
+                style: const TextStyle(color: AppColors.orange, fontWeight: FontWeight.w700, fontSize: 13),
               ),
               const SizedBox(height: 4),
               _planSpecLine(true, 'Rotas ilimitadas (sem teto de entregas)'),
               _planSpecLine(true, 'Otimização, trecho laranja GPS→pin, reotimizar'),
-              _planSpecLine(true, 'Controle de gastos, CEP+número, GPS na otimização'),
-              _planSpecLine(true, 'Licença por aparelho: copie o ID abaixo e envie ao suporte (WhatsApp)'),
+              _planSpecLine(true, 'Mapa escuro Google, controle de gastos'),
+              _planSpecLine(true, 'Não pagou → PRO expira sozinho (sem revogar manual)'),
               const SizedBox(height: 10),
               Text(
                 'Trial: ${PlanLimits.proTrialDays} dias de PRO uma vez por aparelho. '
                 'Desinstalar/reinstalar o app → plano Grátis (sem novo trial). '
-                'Depois: Grátis (até ${PlanLimits.freeMaxDeliveriesPerRoute} entregas/rota). '
-                'Licença paga pode ser revogada online se necessário.',
+                'Depois: Grátis (até ${PlanLimits.freeMaxDeliveriesPerRoute} entregas/rota) ou PRO mensal.',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.48),
                   fontSize: 11,

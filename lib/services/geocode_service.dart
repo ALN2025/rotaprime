@@ -5,7 +5,6 @@ import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/utils/delivery_address_core.dart';
 import 'package:rota_prime/utils/limpar_endereco.dart';
 import 'package:rota_prime/utils/manual_address_format.dart';
-
 class GeocodeResult {
   GeocodeResult({
     required this.lat,
@@ -62,8 +61,8 @@ class GeocodeService {
 
   Future<void> _respectRateLimit() async {
     final elapsed = DateTime.now().difference(_lastRequest);
-    if (elapsed.inMilliseconds < 1100) {
-      await Future<void>.delayed(Duration(milliseconds: 1100 - elapsed.inMilliseconds));
+    if (elapsed.inMilliseconds < 750) {
+      await Future<void>.delayed(Duration(milliseconds: 750 - elapsed.inMilliseconds));
     }
     _lastRequest = DateTime.now();
   }
@@ -136,16 +135,16 @@ class GeocodeService {
       if (structured != null) hit = structured;
     }
 
-    hit ??= await _nominatimSearch(
-      query,
-      cityToken: cityGeocodeToken(loc.city),
-    );
     if (hit == null || !hit.found) {
       hit = await _photonSearch(
         limparEndereco(query, defaultCity: loc.city.isNotEmpty ? '${loc.city}/${loc.uf}' : ''),
         cityToken: cityGeocodeToken(loc.city),
       );
     }
+    hit ??= await _nominatimSearch(
+      query,
+      cityToken: cityGeocodeToken(loc.city),
+    );
 
     final result = (hit != null && hit.found) ? hit : GeocodeResult.fallback();
     if (result.found) {

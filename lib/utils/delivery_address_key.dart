@@ -3,9 +3,11 @@ import 'package:rota_prime/utils/delivery_address_core.dart'
     show
         addressTextForParada,
         buildAddressCoreKey,
+        buildAddressSiteKey,
         coordsWithinMeters,
         isMultiUnitBuildingSite,
-        normalizeAddressToken;
+        normalizeAddressToken,
+        sameBuildingSite;
 
 /// Chave do local de entrega (mesmo AP / mesma casa = mesma chave).
 String deliveryAddressKey(Parada p) {
@@ -30,11 +32,9 @@ String deliveryAddressKey(Parada p) {
   return 'row:${p.id}_${p.ordemExibicao}';
 }
 
-/// Mesmo local: mesma chave de endereço. Casa não agrupa vizinho só por GPS.
+/// Mesmo local de entrega: mesmo prédio/número (AP, bloco e nome podem diferir).
 bool sameDeliveryLocation(Parada a, Parada b) {
-  final ca = buildAddressCoreKey(a);
-  final cb = buildAddressCoreKey(b);
-  if (ca.isNotEmpty && cb.isNotEmpty) return ca == cb;
+  if (sameBuildingSite(a, b)) return true;
   if (deliveryAddressKey(a) == deliveryAddressKey(b)) return true;
 
   if (isMultiUnitBuildingSite(a) && isMultiUnitBuildingSite(b)) {
@@ -42,6 +42,12 @@ bool sameDeliveryLocation(Parada a, Parada b) {
         buildAddressCoreKey(a) == buildAddressCoreKey(b);
   }
   return false;
+}
+
+List<Parada> paradasAtSameBuildingSite(List<Parada> all, Parada anchor) {
+  final rows = all.where((p) => sameBuildingSite(p, anchor)).toList()
+    ..sort((a, b) => a.ordemExibicao.compareTo(b.ordemExibicao));
+  return rows;
 }
 
 bool isBusinessDelivery(Parada p) {

@@ -347,11 +347,11 @@ class _FinalizarRotaScreenState extends ConsumerState<FinalizarRotaScreen> {
 
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
 
           ElevatedButton(
 
-            onPressed: _calcularPro,
+            onPressed: _finalizarGratis,
 
             style: primaryOrangeButtonStyle().copyWith(
 
@@ -359,7 +359,37 @@ class _FinalizarRotaScreenState extends ConsumerState<FinalizarRotaScreen> {
 
             ),
 
-            child: const Text('Calcular lucro real e finalizar'),
+            child: const Text('Marcar como finalizada (sem km)'),
+
+          ),
+
+          const SizedBox(height: 12),
+
+          OutlinedButton(
+
+            onPressed: _calcularPro,
+
+            style: OutlinedButton.styleFrom(
+
+              foregroundColor: Colors.white,
+
+              side: const BorderSide(color: AppColors.orange),
+
+              minimumSize: const Size.fromHeight(48),
+
+            ),
+
+            child: const Text('Calcular lucro com km final (opcional)'),
+
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+
+            'Km e gastos são opcionais — use só se quiser o relatório financeiro.',
+
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
 
           ),
 

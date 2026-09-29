@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 const kRouteMapModeBarHeight = 52.0;
 
 /// Altura aproximada do topo (toggle + cards), sem SafeArea.
-const kDriverRouteTopBarBodyHeight = 96.0;
+const kDriverRouteTopBarBodyHeight = 72.0;
 
 double driverRouteTopChromeHeight(BuildContext context) {
   return MediaQuery.paddingOf(context).top + kDriverRouteTopBarBodyHeight;

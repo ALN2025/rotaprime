@@ -54,8 +54,10 @@ class UserPrefsService {
     for (final v in StopIdDisplay.values) {
       if (v.name == sid) stopId = v;
     }
+    final userPicked = json['basemapUserPicked'] as bool? ?? (basemap == MapBasemap.dark);
     return MapSettingsState(
       basemap: basemap,
+      basemapUserPicked: userPicked,
       avoidTolls: json['avoidTolls'] as bool? ?? true,
       navBubble: json['navBubble'] as bool? ?? true,
       themeDark: json['themeDark'] as bool? ?? true,
@@ -70,6 +72,7 @@ class UserPrefsService {
   Map<String, dynamic> mapSettingsToJson(MapSettingsState s) {
     return {
       'basemap': s.basemap.name,
+      'basemapUserPicked': s.basemapUserPicked,
       'avoidTolls': s.avoidTolls,
       'navBubble': s.navBubble,
       'themeDark': s.themeDark,

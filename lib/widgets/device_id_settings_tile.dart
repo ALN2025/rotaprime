@@ -73,8 +73,8 @@ class _DeviceIdSettingsTileState extends State<DeviceIdSettingsTile> {
                         const SizedBox(height: 8),
                         Text(
                           'Cada celular tem um ID próprio e estável. '
-                          'A chave PRO só funciona no ID para o qual foi gerada — '
-                          'não ativa em outro aparelho.',
+                          'A assinatura PRO no Mercado Pago fica vinculada a este ID — '
+                          'use «Sincronizar plano» após pagar.',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.78),
                             fontSize: 13,
@@ -83,8 +83,8 @@ class _DeviceIdSettingsTileState extends State<DeviceIdSettingsTile> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Desinstalar e instalar de novo no mesmo celular costuma manter o mesmo ID; '
-                          'outro telefone ou reset de fábrica exige nova licença com o ID novo.',
+                          'Desinstalar e instalar de novo no mesmo celular costuma manter o mesmo ID. '
+                          'Outro telefone ou reset de fábrica gera outro ID.',
                           style: TextStyle(
                             color: AppColors.muted,
                             fontSize: 12,
@@ -116,8 +116,8 @@ class _DeviceIdSettingsTileState extends State<DeviceIdSettingsTile> {
               if (!_loading && _id != null) ...[
                 const SizedBox(height: 6),
                 Text(
-                  'Copie o ID e envie pelo WhatsApp (Suporte, em Configurações). '
-                  'O suporte envia a chave PRO vinculada a este aparelho — cole em «Ativar PRO».',
+                  'Se o suporte pedir, copie este ID. '
+                  'Para assinar PRO, use os botões Mercado Pago em Configurações.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 11,

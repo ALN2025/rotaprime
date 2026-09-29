@@ -1,36 +1,27 @@
 import 'package:latlong2/latlong.dart';
 import 'package:rota_prime/models/parada.dart';
+import 'package:rota_prime/utils/map_route_fit.dart';
 
 class MapCameraUtils {
   MapCameraUtils._();
 
-  static const defaultCenter = LatLng(-29.1678, -51.1794);
+  static const defaultCenter = kMapDefaultCenter;
 
   static LatLng initialCenterForRoute({
     required List<Parada> paradas,
     required List<LatLng> routePoints,
     int? highlightStop,
+    LatLng? driver,
   }) {
-    if (highlightStop != null) {
-      for (final p in paradas) {
-        if (p.ordemExibicao == highlightStop &&
-            p.latitude != null &&
-            p.longitude != null) {
-          return LatLng(p.latitude!, p.longitude!);
-        }
-      }
-    }
-    for (final p in paradas) {
-      if (!p.entregue && !p.falha && p.latitude != null && p.longitude != null) {
-        return LatLng(p.latitude!, p.longitude!);
-      }
+    if (paradas.any((p) => p.latitude != null && p.longitude != null)) {
+      return mapPlanningInitialCenter(
+        paradas: paradas,
+        driver: driver,
+        highlightStop: highlightStop,
+      );
     }
     if (routePoints.isNotEmpty) return routePoints.first;
-    for (final p in paradas) {
-      if (p.latitude != null && p.longitude != null) {
-        return LatLng(p.latitude!, p.longitude!);
-      }
-    }
+    if (driver != null && isLatLngInContinentalBrazil(driver)) return driver;
     return defaultCenter;
   }
 

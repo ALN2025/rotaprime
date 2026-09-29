@@ -22,6 +22,12 @@ class PlanStatusBadge extends ConsumerWidget {
           AppColors.orange,
           Icons.verified_rounded,
         ),
+      PlanAccessKind.subscriptionPro => (
+          'PRO',
+          'Mensal',
+          AppColors.orange,
+          Icons.payments_outlined,
+        ),
       PlanAccessKind.trialPro => (
           'TRIAL',
           '${sub.trialDaysRemaining}d',
@@ -38,6 +44,7 @@ class PlanStatusBadge extends ConsumerWidget {
 
     final compactLabel = switch (kind) {
       PlanAccessKind.licensedPro => 'PRO',
+      PlanAccessKind.subscriptionPro => 'PRO',
       PlanAccessKind.trialPro => 'TRIAL ${sub.trialDaysRemaining}d',
       PlanAccessKind.free => 'GRÁTIS',
     };

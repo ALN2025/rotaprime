@@ -1,6 +1,26 @@
 import 'package:rota_prime/models/romaneio_carrier.dart';
 import 'package:rota_prime/utils/column_matcher.dart';
+import 'package:rota_prime/utils/romaneio_package_order.dart';
 import 'package:rota_prime/utils/spx_regex.dart';
+
+/// Colunas com número do pacote na sacola (Shopee/SPX) — não rastreio BR/SPX.
+const explicitSequenceColumnAliases = [
+  'Sequence',
+  'Seq',
+  'Sequencia',
+  'Sequência',
+  'Ordem',
+  'Order',
+  'Order Number',
+  'Número ordem',
+  'Numero ordem',
+  'Nº ordem',
+  'Número do pacote',
+  'Numero do pacote',
+  'Package Number',
+  'Package',
+  'Pacote',
+];
 
 String? pickExactRomaneioCell(Map<String, String> cells, List<String> aliases) {
   final normalized = <String, String>{
@@ -12,38 +32,6 @@ String? pickExactRomaneioCell(Map<String, String> cells, List<String> aliases) {
   }
   return null;
 }
-
-/// Colunas de ordem explícita na planilha (≠ ID de rastreio de 9 dígitos).
-
-const explicitSequenceColumnAliases = [
-
-  'Sequence',
-
-  'Seq',
-
-  'Ordem',
-
-  'Order',
-
-  'Número ordem',
-
-  'Numero ordem',
-
-  'Nº ordem',
-
-  'Pacote',
-
-  'Package',
-
-  'Package Number',
-
-  'Número do pacote',
-
-  'Numero do pacote',
-
-];
-
-
 
 /// Um código por linha no app — sem NF/série + pedido juntos.
 
@@ -81,16 +69,43 @@ const _packageDisplayAliases = [
 
 
 
+bool _cellValueIsTrackingNotBagOrder(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty) return true;
+  if (isShopeePlusOrderLabel(t)) return false;
+  if (RegExp(r'^\d{1,5}$').hasMatch(t)) return false;
+  return looksLikeTrackingCode(t);
+}
+
+/// Primeira coluna que traz ordem numérica (+N), ignorando BR/SPX TN em coluna errada.
+String? pickRomaneioSequenceRaw(Map<String, String> cells) {
+  for (final alias in explicitSequenceColumnAliases) {
+    final raw = pickExactRomaneioCell(cells, [alias]);
+    if (raw == null || raw.trim().isEmpty) continue;
+    if (_cellValueIsTrackingNotBagOrder(raw)) continue;
+    return raw.trim();
+  }
+  final fuzzy = pickCell(cells, explicitSequenceColumnAliases);
+  if (fuzzy != null &&
+      fuzzy.trim().isNotEmpty &&
+      !_cellValueIsTrackingNotBagOrder(fuzzy)) {
+    return fuzzy.trim();
+  }
+  return null;
+}
+
 /// Ordem interna / sort: coluna Sequence ou ordem da linha no romaneio.
-
 int importRomaneioSequence(Map<String, String> cells, int displayOrder) {
+  return importRomaneioSheetOrder(cells, displayOrder).sequence;
+}
 
-  final fromSheet = int.tryParse(pickExactRomaneioCell(cells, explicitSequenceColumnAliases) ?? '') ?? 0;
-
-  if (fromSheet > 0) return fromSheet;
-
-  return displayOrder;
-
+/// Lê Sequence/Ordem/Pacote — inclui extras Shopee (`+2`, `+15`).
+RomaneioSheetOrder importRomaneioSheetOrder(
+  Map<String, String> cells,
+  int displayOrder,
+) {
+  final raw = pickRomaneioSequenceRaw(cells);
+  return parseRomaneioSheetOrder(raw, displayOrder);
 }
 
 

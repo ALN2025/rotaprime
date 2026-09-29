@@ -32,16 +32,24 @@ RomaneioCarrier detectRomaneioCarrier(
   if (isPdf && layout == ImportRomaneioLayout.pdfProtocoloEntrega) {
     return RomaneioCarrier.magalog;
   }
-  if (isPdf &&
-      layout == ImportRomaneioLayout.pdfRelatorioRj &&
-      rows.any((r) => (r.cells['Prazo'] ?? '').trim().isNotEmpty)) {
-    final blob = _haystack(fileName, pdfPlainText, rows);
-    if (blob.contains('controle de pacotes')) {
+  if (isPdf && layout == ImportRomaneioLayout.pdfRelatorioRj) {
+    if (rows.any((r) => (r.cells['Transportadora'] ?? '').toLowerCase() == 'loggi')) {
+      return RomaneioCarrier.loggi;
+    }
+    if (rows.any((r) => _hasPrazoCell(r.cells['Prazo']))) {
+      return RomaneioCarrier.loggi;
+    }
+    final blob2 = _haystack(fileName, pdfPlainText, rows);
+    if (blob2.contains('controle de pacotes') ||
+        blob2.contains('prazo de entrega') ||
+        blob2.contains('id pacote')) {
       return RomaneioCarrier.loggi;
     }
   }
   return RomaneioCarrierBranding.fromLayout(layout);
 }
+
+bool _hasPrazoCell(String? prazo) => (prazo ?? '').trim().isNotEmpty;
 
 String _haystack(String? fileName, String? pdfText, List<ParsedRow> rows) {
   final buf = StringBuffer();

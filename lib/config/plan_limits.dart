@@ -2,6 +2,7 @@ class PlanLimits {
   PlanLimits._();
   /// PRO completo nos primeiros dias (por aparelho, sem licença).
   static const int proTrialDays = 7;
+  static const double proMonthlyPriceBrl = 30;
   /// Plano Grátis: até esta quantidade de entregas na mesma rota (planilha ou manual).
   static const int freeMaxDeliveriesPerRoute = 50;
   static bool withinFreeRouteLimit(int n) => n <= freeMaxDeliveriesPerRoute;

@@ -40,6 +40,19 @@ class RomaneioImportRegistry {
     await prefs.setString(_prefKey(rotaId), jsonEncode(list));
   }
 
+  /// Isar reutiliza IDs — limpar ao excluir rota ou o mesmo arquivo parece “já importado”.
+  static Future<void> clearForRota(int rotaId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefKey(rotaId));
+  }
+
+  static Future<void> clearForRotas(Iterable<int> rotaIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final id in rotaIds) {
+      await prefs.remove(_prefKey(id));
+    }
+  }
+
   /// Mensagem quando o arquivo já entrou nesta rota.
   static const duplicateFileMessage =
       'Romaneio já importado nesta rota.\n\n'

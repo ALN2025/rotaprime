@@ -5,7 +5,7 @@ import 'package:rota_prime/models/romaneio_carrier.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 
 void main() {
-  test('Shopee — pin e chip = ordem do pacote', () {
+  test('Shopee — pin = ordem na rota; chip = código do pacote', () {
     final p = Parada()
       ..ordemExibicao = 3
       ..sequence = 42
@@ -13,11 +13,11 @@ void main() {
       ..romaneioLayout = ImportRomaneioLayout.shopeeOrdemPacote;
     final all = [p];
 
-    expect(ParadaLabels.mapPinLabel(all, p), '42');
-    expect(ParadaLabels.packageOrderDisplay(p), '42');
+    expect(ParadaLabels.mapPinLabel(all, p), '3');
+    expect(ParadaLabels.packageOrderDisplay(p), 'BR305557690');
   });
 
-  test('PDF Relatório RJ — pin rota, chip = pin (Loggi/Magalog)', () {
+  test('PDF Relatório RJ — pin rota; chip = ID Loggi', () {
     final p = Parada()
       ..ordemExibicao = 3
       ..sequence = 3
@@ -27,10 +27,10 @@ void main() {
     final all = [p];
 
     expect(ParadaLabels.mapPinLabel(all, p), '3');
-    expect(ParadaLabels.packageOrderDisplay(p, route: all), '3');
+    expect(ParadaLabels.packageOrderDisplay(p, route: all), '563608526');
   });
 
-  test('PDF Protocolo — pin rota, chip = pin', () {
+  test('PDF Protocolo — pin rota; chip = ID Magalog', () {
     final p = Parada()
       ..ordemExibicao = 5
       ..sequence = 5
@@ -40,10 +40,10 @@ void main() {
     final all = [p];
 
     expect(ParadaLabels.mapPinLabel(all, p), '5');
-    expect(ParadaLabels.packageOrderDisplay(p, route: all), '5');
+    expect(ParadaLabels.packageOrderDisplay(p, route: all), '305557690');
   });
 
-  test('Rota mista — pin 1…N unificado; chip por transportadora', () {
+  test('Rota mista — pin 1…N; chip por transportadora', () {
     final shopee = Parada()
       ..ordemExibicao = 1
       ..sequence = 99
@@ -59,7 +59,7 @@ void main() {
     expect(ParadaLabels.routeUsesUnifiedPinOrder(all), isTrue);
     expect(ParadaLabels.mapPinLabel(all, shopee), '1');
     expect(ParadaLabels.mapPinLabel(all, magalog), '2');
-    expect(ParadaLabels.packageOrderDisplay(shopee, route: all), '1');
-    expect(ParadaLabels.packageOrderDisplay(magalog, route: all), '2');
+    expect(ParadaLabels.packageOrderDisplay(shopee, route: all), 'BR99');
+    expect(ParadaLabels.packageOrderDisplay(magalog, route: all), '88776655');
   });
 }

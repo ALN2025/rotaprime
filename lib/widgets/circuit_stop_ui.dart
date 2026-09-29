@@ -75,6 +75,34 @@ class StopDeliveryStatusChip extends StatelessWidget {
   }
 }
 
+class _EmphasizedStopPinBadgeCompact extends StatelessWidget {
+  const _EmphasizedStopPinBadgeCompact({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.orange,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+}
+
 class _EmphasizedStopPinBadge extends StatelessWidget {
   const _EmphasizedStopPinBadge({required this.label});
 
@@ -120,6 +148,7 @@ class CircuitStopMetaRow extends StatelessWidget {
     this.emphasized = false,
     this.selectedColumns = const {},
     this.displayAddress,
+    this.compactEmphasized = false,
   });
 
   final Parada parada;
@@ -130,6 +159,7 @@ class CircuitStopMetaRow extends StatelessWidget {
   final bool emphasized;
   final Set<String> selectedColumns;
   final String? displayAddress;
+  final bool compactEmphasized;
 
   bool _show(String field) => DeliveryFieldVisibility.show(selectedColumns, field);
 
@@ -166,17 +196,24 @@ class CircuitStopMetaRow extends StatelessWidget {
       children: [
         if (emphasized)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: EdgeInsets.only(bottom: compactEmphasized ? 4 : 10),
             child: Material(
-              color: AppColors.sheet,
+              color: compactEmphasized ? Colors.transparent : AppColors.sheet,
               borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                padding: EdgeInsets.fromLTRB(
+                  compactEmphasized ? 0 : 10,
+                  compactEmphasized ? 0 : 10,
+                  compactEmphasized ? 0 : 10,
+                  compactEmphasized ? 0 : 10,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _EmphasizedStopPinBadge(label: pin),
-                    const SizedBox(width: 10),
+                    compactEmphasized
+                        ? _EmphasizedStopPinBadgeCompact(label: pin)
+                        : _EmphasizedStopPinBadge(label: pin),
+                    SizedBox(width: compactEmphasized ? 8 : 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,11 +224,11 @@ class CircuitStopMetaRow extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   address.isNotEmpty ? address : 'Endereço não informado',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 16,
+                                    fontSize: compactEmphasized ? 14 : 16,
                                     fontWeight: FontWeight.w800,
-                                    height: 1.28,
+                                    height: 1.25,
                                   ),
                                 ),
                               ),

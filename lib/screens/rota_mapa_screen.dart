@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rota_prime/app/theme.dart';
@@ -19,27 +18,36 @@ import 'package:rota_prime/screens/controle_gastos_screen.dart';
 import 'package:rota_prime/screens/finalizar_rota_screen.dart';
 import 'package:rota_prime/screens/home_map_screen.dart';
 import 'package:rota_prime/widgets/map_layers_sheet.dart';
-import 'package:rota_prime/widgets/route_map.dart';
+import 'package:rota_prime/widgets/planning_route_map_layer.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 import 'package:rota_prime/widgets/circuit_stop_ui.dart';
 import 'package:rota_prime/widgets/stop_detail_body.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rota_prime/services/speech_search_input.dart';
+import 'package:rota_prime/app/app_navigator.dart';
 import 'package:rota_prime/widgets/add_parada_sheet.dart';
 import 'package:rota_prime/widgets/manual_parada_dialog.dart';
+import 'package:rota_prime/widgets/route_finalize_flow.dart';
 import 'package:rota_prime/providers/subscription_provider.dart';
 import 'package:rota_prime/widgets/pro_gate.dart';
 import 'package:rota_prime/widgets/route_options_sheet.dart';
+import 'package:rota_prime/widgets/same_address_map_alert.dart';
 import 'package:rota_prime/widgets/spoke_widgets.dart';
 import 'package:rota_prime/widgets/stop_action_panel.dart';
+import 'package:rota_prime/services/clustering_service.dart';
+import 'package:rota_prime/services/map_pin_icon_cache.dart';
 import 'package:rota_prime/services/map_tile_prefetch.dart';
+import 'package:rota_prime/utils/parada_map_markers.dart';
+import 'package:rota_prime/utils/route_map_stamp.dart';
 import 'package:rota_prime/services/spreadsheet_picker.dart';
 import 'package:rota_prime/utils/map_screen_layout.dart';
 import 'package:rota_prime/widgets/route_map_mode_toggle.dart';
-import 'package:rota_prime/utils/map_route_fit.dart';
+import 'package:rota_prime/app/map_performance.dart';
+import 'package:rota_prime/utils/rota_map_controller.dart';
 import 'package:rota_prime/utils/route_delivery_stats.dart';
 import 'package:rota_prime/widgets/map_chrome.dart';
 import 'package:rota_prime/widgets/delivery_map_legend.dart';
+import 'package:rota_prime/widgets/saved_routes_menu_sheet.dart';
 import 'package:rota_prime/widgets/route_map_header_bar.dart';
 import 'package:rota_prime/widgets/route_planning_action_bar.dart';
 
@@ -57,13 +65,17 @@ class RotaMapaScreen extends ConsumerStatefulWidget {
   ConsumerState<RotaMapaScreen> createState() => _RotaMapaScreenState();
 }
 
-class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
-  final _mapController = MapController();
+class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => widget.embeddedInShell;
+
+  final _mapController = RotaMapController();
   final _sheetController = DraggableScrollableController();
   final _searchController = TextEditingController();
   bool _optimized = false;
   int? _selectedParadaId;
-  String _searchQuery = '';
+  final _searchQueryListenable = ValueNotifier('');
 
   static const _sheetMinSize = 0.02;
   static const _sheetListSize = 0.58;
@@ -71,36 +83,150 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
 
   RouteMapPanelMode _panelMode = RouteMapPanelMode.map;
   bool _deliveryDockExpanded = false;
+  /// false = painel da parada (pin); true = roteiro scrollável (botão X estilo Spok).
+  bool _showItineraryInSheet = true;
   bool _sheetListenerAttached = false;
-  bool _optimizingRoute = false;
+
+  /// Equivalente a `Map<String, BitmapDescriptor>` (Google Maps) — estilos ~32 px.
+  late final Map<String, TextStyle> _iconCache;
+  List<ClusterMapPoint> _clusterSource = [];
+  List<MapPinCluster>? _viewportClusters;
+  int _viewportRefreshGen = 0;
+  Object? _lastClusterParadasStamp;
+  bool _isRefreshingViewport = false;
+  bool _optimizeInProgress = false;
+
+  bool _viewportCullEnabled(List<Parada> paradas) =>
+      paradas.length > MapPerformance.heavyStopCount;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _attachSheetListener();
-      _enterDriverMapMode(animate: false);
-      final rota = ref.read(rotaProvider).rota;
-      final isPro = ref.read(subscriptionProvider).isPro;
-      if (rota?.otimizada == true) {
-        if (mounted) setState(() => _optimized = true);
-        if (ref.read(rotaProvider).paradas.length <= 45) {
-          await _syncNavigationTraceForTarget();
-        }
-      } else if (!isPro && ref.read(rotaProvider).paradas.isNotEmpty) {
-        await ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly();
-        if (mounted) setState(() => _optimized = true);
-      }
-      if (widget.openSearchOnStart) {
-        _showSearchAndAddDialog();
-      }
-      if (!mounted) return;
-      final toFit = ref.read(rotaProvider).paradas;
-      if (toFit.length > 40) {
-        await Future<void>.delayed(const Duration(milliseconds: 350));
-      }
-      if (mounted) fitMapControllerToParadas(_mapController, toFit);
+    final pinIcons = MapPinIconCache()..preload();
+    _iconCache = pinIcons.cache;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrapPlanningMap());
     });
+  }
+
+  void _rebuildClusterSource(List<Parada> paradas) {
+    final reps = representativeParadasForMap(paradas, hideCompleted: false);
+    final pts = buildMapMarkerDisplayPoints(paradas);
+    final labels = ParadaLabels.mapPinDisplayLabelsForRepresentatives(paradas, reps);
+    _clusterSource = [
+      for (final p in reps)
+        if (p.latitude != null && p.longitude != null)
+          ClusterMapPoint(
+            paradaId: p.id,
+            latitude: pts[p.id]?.latitude ?? p.latitude!,
+            longitude: pts[p.id]?.longitude ?? p.longitude!,
+            pinLabel: labels[p.id] ?? ParadaLabels.mapPinDisplayLabel(paradas, p),
+          ),
+    ];
+    if (_viewportCullEnabled(paradas)) {
+      _viewportClusters = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refreshViewportMarkers();
+      });
+    } else {
+      _viewportClusters = null;
+    }
+  }
+
+  void _syncClusterSourceIfNeeded(List<Parada> paradas) {
+    final stamp = routeMapParadasStamp(paradas);
+    if (stamp == _lastClusterParadasStamp) return;
+    _lastClusterParadasStamp = stamp;
+    _rebuildClusterSource(paradas);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _refreshViewportMarkers() {
+    unawaited(_refreshViewportMarkersAsync());
+  }
+
+  Future<void> _refreshViewportMarkersAsync() async {
+    if (_isRefreshingViewport) return;
+    final paradas = ref.read(rotaProvider).paradas;
+    if (!mounted || !_viewportCullEnabled(paradas)) {
+      if (_viewportClusters != null && mounted) {
+        setState(() => _viewportClusters = null);
+      }
+      return;
+    }
+    if (_clusterSource.isEmpty) return;
+
+    _isRefreshingViewport = true;
+    _viewportRefreshGen++;
+    final gen = _viewportRefreshGen;
+    try {
+      final bounds = await _mapController.visibleBoundsAsync();
+      if (bounds == null) return;
+      final visible = filtrarPorBounds(
+        _clusterSource,
+        south: bounds.south,
+        north: bounds.north,
+        west: bounds.west,
+        east: bounds.east,
+      ).toList();
+      final clusters = clusterizar(visible);
+      if (!mounted || gen != _viewportRefreshGen) return;
+      setState(() => _viewportClusters = clusters);
+    } finally {
+      _isRefreshingViewport = false;
+    }
+  }
+
+  Future<void> _bootstrapPlanningMap() async {
+    _attachSheetListener();
+    await ref.read(rotaProvider.notifier).refreshDriverLocation();
+    final rota = ref.read(rotaProvider).rota;
+    final isPro = ref.read(subscriptionProvider).isPro;
+    final paradas = ref.read(rotaProvider).paradas;
+    final nStops = paradas.length;
+    if (nStops >= MapPerformance.listFirstStopCount) {
+      if (mounted) {
+        setState(() => _panelMode = RouteMapPanelMode.list);
+        _applyPanelMode(RouteMapPanelMode.list, animate: false);
+      }
+    } else {
+      _enterDriverMapMode(animate: false);
+    }
+    if (rota?.otimizada == true) {
+      if (mounted) setState(() => _optimized = true);
+      if (paradas.length <= 45) {
+        unawaited(_syncNavigationTraceForTarget());
+      }
+    } else if (paradas.isNotEmpty) {
+      unawaited(_applyImportOrderInBackground(isPro));
+    }
+    if (widget.openSearchOnStart && mounted) {
+      _showSearchAndAddDialog();
+    }
+    if (!mounted) return;
+    final toFit = ref.read(rotaProvider).paradas;
+    if (toFit.isEmpty) return;
+    final n = toFit.length;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      fitRotaMapControllerToParadas(
+        _mapController,
+        toFit,
+        maxZoom: n > 70 ? 13 : 16,
+        focusNear: ref.read(rotaProvider).driverPosition,
+        ultraFast: n >= MapPerformance.listFirstStopCount,
+      );
+      _rebuildClusterSource(toFit);
+      _refreshViewportMarkers();
+    });
+  }
+
+  Future<void> _applyImportOrderInBackground(bool isPro) async {
+    await ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly();
+    if (!mounted || isPro) return;
+    setState(() => _optimized = true);
   }
 
   void _attachSheetListener() {
@@ -179,20 +305,21 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
   Future<void> _syncNavigationTraceForTarget({int? paradaId}) async {
     final isPro = ref.read(subscriptionProvider).isPro;
     if (!isPro || ref.read(rotaProvider).rota?.otimizada != true) return;
-    var id = paradaId ??
-        _selectedParadaId ??
-        ref.read(rotaProvider).navigationTargetParadaId;
-    if (id == null) {
-      for (final p in ref.read(rotaProvider).paradas) {
-        if (!p.entregue && !p.falha) {
-          id = p.id;
-          if (mounted) setState(() => _selectedParadaId = id);
-          break;
-        }
-      }
+    final nav = ref.read(rotaProvider.notifier);
+    if (paradaId != null) {
+      await nav.selectNavigationTarget(paradaId, awaitLegRefresh: true);
+      if (mounted) setState(() => _selectedParadaId = paradaId);
+      return;
     }
-    if (id == null) return;
-    await ref.read(rotaProvider.notifier).selectNavigationTarget(id);
+    await nav.syncActiveNavigationTarget();
+    await nav.refreshNavigationLegForActiveTarget(force: true);
+    final active = RotaNotifier.activeNavigationParadaFrom(
+      ref.read(rotaProvider),
+      isPro: true,
+    );
+    if (active != null && mounted) {
+      setState(() => _selectedParadaId = active.id);
+    }
   }
 
   @override
@@ -202,6 +329,8 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     }
     _sheetController.dispose();
     _searchController.dispose();
+    _searchQueryListenable.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -223,6 +352,29 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     );
   }
 
+  void _expandSheetForStopDetail() {
+    if (!_sheetController.isAttached) return;
+    _sheetController.animateTo(
+      0.56,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _closeStopDetailOpenItinerary() {
+    setState(() {
+      _showItineraryInSheet = true;
+      _selectedParadaId = null;
+      _panelMode = RouteMapPanelMode.list;
+    });
+    if (!_sheetController.isAttached) return;
+    _sheetController.animateTo(
+      0.88,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _moveToParada(Parada p) {
     if (p.latitude == null || p.longitude == null) return;
     final h = MediaQuery.of(context).size.height;
@@ -233,7 +385,15 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     );
   }
 
-  void _openParada(Parada p) {
+  Future<void> _openParada(Parada p, {bool fromMapPin = false}) async {
+    if (fromMapPin) {
+      await showSameAddressDeliveriesAlertIfNeeded(
+        context,
+        all: ref.read(rotaProvider).paradas,
+        tapped: p,
+      );
+      if (!mounted) return;
+    }
     final isPro = ref.read(subscriptionProvider).isPro;
     final optimized = ref.read(rotaProvider).rota?.otimizada == true;
     if (isPro && optimized) {
@@ -242,10 +402,58 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     setState(() {
       _selectedParadaId = p.id;
       _deliveryDockExpanded = true;
+      _showItineraryInSheet = false;
     });
-    if (_panelMode == RouteMapPanelMode.list) {
+    if (fromMapPin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _expandSheetForStopDetail());
+    } else if (_panelMode == RouteMapPanelMode.list) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _expandStopSheet());
     }
+  }
+
+  Future<void> _duplicateParada(Parada p) async {
+    final dup = await ref.read(rotaProvider.notifier).duplicateParada(p.id);
+    if (!mounted || dup == null) return;
+    setState(() {
+      _selectedParadaId = dup.id;
+      _optimized = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Parada duplicada — otimize de novo se precisar')),
+    );
+  }
+
+  Future<void> _confirmRemoveParada(Parada p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.sheet,
+        title: const Text('Remover parada?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          p.destinationAddress.trim().isNotEmpty
+              ? p.destinationAddress.trim()
+              : 'Esta entrega será excluída da rota.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remover', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final removed = await ref.read(rotaProvider.notifier).removeParada(p.id);
+    if (!mounted || !removed) return;
+    setState(() {
+      _selectedParadaId = null;
+      _optimized = ref.read(rotaProvider).rota?.otimizada == true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Parada removida')),
+    );
   }
 
   Future<void> _editParada(Parada p) async {
@@ -303,7 +511,90 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     final q = await listenRouteSearchQuery(context);
     if (!mounted || q == null) return;
     _searchController.text = q;
-    setState(() => _searchQuery = q);
+    _searchQueryListenable.value = q;
+  }
+
+  Future<void> _onRouteSearchMic() async {
+    if (_searchController.text.trim().isEmpty) {
+      final added = await showAddParadaOptionsSheet(
+        rootAppContext ?? context,
+        ref,
+      );
+      if (!mounted || added == null) return;
+      await _openParada(added);
+      return;
+    }
+    await _searchRouteByVoice();
+  }
+
+  Future<void> _openRouteScanMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.sheet,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner, color: AppColors.orange),
+              title: const Text('Escanear pacote', style: TextStyle(color: Colors.white)),
+              subtitle: const Text(
+                'QR ou código de barras do pacote',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(ctx, 'pack'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload_file_outlined, color: AppColors.orange),
+              title: const Text('Importar romaneio', style: TextStyle(color: Colors.white)),
+              subtitle: const Text(
+                'PDF ou planilha de rotas',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(ctx, 'import'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'pack') {
+      await _scanPackageQr();
+    } else if (choice == 'import') {
+      if (ref.read(rotaProvider).paradas.isEmpty) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const FilePickerScreen()),
+        );
+      } else {
+        await pickSpreadsheetAndMergeIntoRoute(ref);
+      }
+    }
+  }
+
+  Future<void> _scanPackageQr() async {
+    final result = await openQrParadaFlow(context, ref);
+    if (!mounted || result == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.spxTn.isNotEmpty
+              ? 'Pacote ${result.spxTn} · parada ${result.ordemExibicao}'
+              : 'Parada ${result.ordemExibicao} selecionada',
+        ),
+      ),
+    );
+    await _openParada(result);
+  }
+
+  Future<void> _finishRouteFromItinerary() async {
+    await runSpokStyleRouteFinishFlow(
+      context,
+      ref,
+      onCopyStops: _copyStops,
+    );
   }
 
   Future<void> _addParadaManual() async {
@@ -350,13 +641,13 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
             hintText: 'Endereço, código ou bairro',
             hintStyle: TextStyle(color: Colors.white38),
           ),
-          onChanged: (v) => setState(() => _searchQuery = v),
+          onChanged: (v) => _searchQueryListenable.value = v,
         ),
         actions: [
           TextButton(
             onPressed: () {
               _searchController.clear();
-              setState(() => _searchQuery = '');
+              _searchQueryListenable.value = '';
               Navigator.pop(ctx);
             },
             child: const Text('Limpar'),
@@ -393,9 +684,10 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
   }
 
   Future<void> _otimizar() async {
-    if (!mounted) return;
+    if (!mounted || _optimizeInProgress) return;
     if (!await ensureProOrPrompt(context, ref, feature: 'Otimização de rota')) return;
     if (!mounted) return;
+    setState(() => _optimizeInProgress = true);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -414,21 +706,31 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     );
 
     try {
-      if (mounted) setState(() => _optimizingRoute = true);
       await ref.read(rotaProvider.notifier).optimizeRoute(
             isPro: ref.read(subscriptionProvider).isPro,
           );
       if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
       setState(() => _optimized = true);
-      _enterDriverMapMode(animate: true);
-      if (ref.read(rotaProvider).paradas.length <= 45) {
-        await _syncNavigationTraceForTarget(
-          paradaId: _selectedParadaId ?? ref.read(rotaProvider).navigationTargetParadaId,
+      final nStops = ref.read(rotaProvider).paradas.length;
+      if (nStops > PlanningRouteMapLayer.maxStopsFullPolyline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Rota otimizada. Com muitas paradas a linha no mapa fica desligada '
+              'para não travar — use a lista e os números nos pins.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
         );
       }
+      _enterDriverMapMode(animate: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_syncNavigationTraceForTarget());
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _optimizingRoute = false);
       Navigator.of(context, rootNavigator: true).pop();
       await showOsrmFailDialog(
         context,
@@ -436,11 +738,9 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
         onSkip: () => setState(() => _optimized = true),
       );
       return;
+    } finally {
+      if (mounted) setState(() => _optimizeInProgress = false);
     }
-
-    if (!mounted) return;
-    if (mounted) setState(() => _optimizingRoute = false);
-    Navigator.of(context, rootNavigator: true).pop();
   }
 
   Future<void> _deleteRoute() async {
@@ -578,8 +878,8 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     return DateFormat('HH:mm').format(DateTime.now().add(Duration(minutes: totalMin)));
   }
 
-  List<Parada> _filteredParadas(List<Parada> paradas) {
-    final q = _searchQuery.trim().toLowerCase();
+  List<Parada> _filteredParadas(List<Parada> paradas, String searchQuery) {
+    final q = searchQuery.trim().toLowerCase();
     if (q.isEmpty) return paradas;
     return paradas.where((p) {
       return p.destinationAddress.toLowerCase().contains(q) ||
@@ -600,6 +900,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     ref.listen<bool>(mapTabOpenSearchProvider, (prev, openSearch) {
       if (openSearch && widget.embeddedInShell && mounted) {
         ref.read(mapTabOpenSearchProvider.notifier).state = false;
@@ -611,21 +912,11 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
 
     final paradas = ref.watch(rotaProvider.select((s) => s.paradas));
     final rota = ref.watch(rotaProvider.select((s) => s.rota));
-    final routePoints = ref.watch(rotaProvider.select((s) => s.routePoints));
-    final navigationLegPoints =
-        ref.watch(rotaProvider.select((s) => s.navigationLegPoints));
-    final navigationTargetParadaId =
-        ref.watch(rotaProvider.select((s) => s.navigationTargetParadaId));
-    final driverPosition =
-        ref.watch(rotaProvider.select((s) => s.driverPosition));
     final totalParadas = ref.watch(rotaProvider.select((s) => s.totalParadas));
     final totalPacotes = ref.watch(rotaProvider.select((s) => s.totalPacotes));
     final allowManualAdd =
         ref.watch(rotaProvider.select((s) => s.allowManualParadaEntry));
     final useGpsOrigin = ref.watch(rotaProvider.select((s) => s.useGpsOrigin));
-    final basemap = ref.watch(mapSettingsProvider).basemap;
-    final mapParadas = _optimizingRoute ? const <Parada>[] : paradas;
-    final visibleParadas = _filteredParadas(paradas);
     final routeOptimized = rota?.otimizada == true;
     final dur = routeOptimized ? (rota?.duracaoMinutos ?? 0) : 0;
     final h = dur ~/ 60;
@@ -634,12 +925,6 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
         ? (rota?.distanciaKm ?? 0).toStringAsFixed(1).replaceAll('.', ',')
         : '';
     final isPro = ref.watch(subscriptionProvider).isPro;
-    final showOsrmRoute = isPro && routeOptimized;
-    final navTargetId = _selectedParadaId ?? navigationTargetParadaId;
-    final leg = navigationLegPoints;
-    final showLegToTarget =
-        showOsrmRoute && navTargetId != null && leg.length >= 2;
-    final showFullOptimizedRoute = showOsrmRoute && !showLegToTarget;
     final routeTotalsLabel = totalPacotes == totalParadas
         ? '$totalParadas paradas'
         : '$totalParadas paradas · $totalPacotes pacotes';
@@ -677,28 +962,27 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
     final sheetChromeBottom = dockH + bottomInset;
     final sheetAreaHeight = MediaQuery.sizeOf(context).height - sheetChromeBottom;
 
+    _syncClusterSourceIfNeeded(paradas);
+
     final content = SafeArea(
         bottom: true,
         child: Stack(
           children: [
             Positioned.fill(
-              child: RouteMap(
-                paradas: mapParadas,
-                fastTileLayer: paradas.length > 20,
-                lightweightMarkers: paradas.length > 55,
-                routePoints: showFullOptimizedRoute ? routePoints : const [],
-                navigationLegPoints: showLegToTarget ? leg : const [],
-                legRouteOnly: showLegToTarget,
-                allowRoutePolylines:
-                    showFullOptimizedRoute || showLegToTarget,
-                driverPosition: driverPosition,
-                highlightStop: null,
-                selectedParadaId: navTargetId,
-                mapController: _mapController,
-                onParadaTap: _openParada,
-                basemap: basemap,
-                hideCompletedStops: false,
-                showStopCallouts: false,
+              child: PlanningRouteMapLayer(
+                rotaMapController: _mapController,
+                selectedParadaId: _selectedParadaId,
+                onParadaTap: (p) => _openParada(p, fromMapPin: true),
+                viewportClusters: _viewportCullEnabled(paradas)
+                    ? _viewportClusters
+                    : null,
+                pinIconStyles: _iconCache,
+                onCameraMove: _viewportCullEnabled(paradas)
+                    ? _refreshViewportMarkers
+                    : null,
+                onCameraIdle: _viewportCullEnabled(paradas)
+                    ? _refreshViewportMarkers
+                    : null,
               ),
             ),
             const Positioned.fill(child: MapTopScrim(height: 120)),
@@ -735,8 +1019,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                       child: Column(
                         children: [
                           Expanded(
-                            child: selected != null &&
-                                    _panelMode == RouteMapPanelMode.list
+                            child: selected != null && !_showItineraryInSheet
                                 ? Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
@@ -764,10 +1047,12 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                             selectedColumns: selectedColumns,
                                             stopIdDisplay: mapSettings.stopIdDisplay,
                                             emphasizedStopHeader: true,
+                                            compactSheet: true,
                                             omitAddressAndPackageTiles: true,
-                                            hideActionBar: true,
-                                            onClose: () => setState(() => _selectedParadaId = null),
+                                            onClose: _closeStopDetailOpenItinerary,
                                             onEdit: () => _editParada(selected),
+                                            onDuplicate: () => _duplicateParada(selected),
+                                            onRemove: () => _confirmRemoveParada(selected),
                                             onNavigate: () => _openExternalNav(selected),
                                             onPrevious: previousInRoute == null
                                                 ? null
@@ -787,7 +1072,14 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                       ),
                                     ],
                                   )
-                                : CustomScrollView(
+                                : ValueListenableBuilder<String>(
+                                    valueListenable: _searchQueryListenable,
+                                    builder: (context, searchQuery, _) {
+                                      final visibleParadas =
+                                          _filteredParadas(sheetParadas, searchQuery);
+                                      final driverPosition =
+                                          ref.read(rotaProvider).driverPosition;
+                                      return CustomScrollView(
                                     controller: scrollController,
                                     physics: const ClampingScrollPhysics(
                                       parent: AlwaysScrollableScrollPhysics(),
@@ -802,10 +1094,15 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                           const SizedBox(height: 4),
                           RouteSearchBar(
                             controller: _searchController,
-                            onChanged: (v) => setState(() => _searchQuery = v),
-                            onScan: null,
-                            onMic: _searchRouteByVoice,
-                            onMore: _openRouteOptions,
+                            onChanged: (v) => _searchQueryListenable.value = v,
+                            onScan: _openRouteScanMenu,
+                            onMic: _onRouteSearchMic,
+                            onMore: () => showSavedRoutesMenuSheet(
+                              context,
+                              ref,
+                              embeddedInShell: widget.embeddedInShell,
+                              onRouteOptions: _openRouteOptions,
+                            ),
                           ),
                           if (allowManualAdd) ...[
                             const SizedBox(height: 8),
@@ -865,13 +1162,13 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                           hintText: 'Código ou endereço',
                                           hintStyle: TextStyle(color: Colors.white38),
                                         ),
-                                        onChanged: (v) => setState(() => _searchQuery = v),
+                                        onChanged: (v) => _searchQueryListenable.value = v,
                                       ),
                                       actions: [
                                         TextButton(
                                           onPressed: () {
                                             _searchController.clear();
-                                            setState(() => _searchQuery = '');
+                                            _searchQueryListenable.value = '';
                                             Navigator.pop(ctx);
                                           },
                                           child: const Text('Limpar'),
@@ -900,16 +1197,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          if (driverPosition != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Motorista: ${driverPosition.latitude.toStringAsFixed(5)}, '
-                                '${driverPosition.longitude.toStringAsFixed(5)}',
-                                style: const TextStyle(color: AppColors.orange, fontSize: 11),
-                              ),
-                            ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             value: useGpsOrigin,
@@ -984,6 +1272,8 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                         child: RouteTimelineStop(
                                           indexLabel: ParadaLabels.mapPinLabel(paradas, p),
                                           showPackageOrderIcon: true,
+                                          packageOrderOnIcon:
+                                              ParadaLabels.packageOrderDisplay(p, route: paradas),
                                           timeLabel: _etaForStop(
                                             p.ordemExibicao,
                                             dur,
@@ -1033,7 +1323,31 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                                 ),
                               ),
                             ),
+                          if (sheetParadas.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                                child: OutlinedButton.icon(
+                                  onPressed: _finishRouteFromItinerary,
+                                  icon: const Icon(Icons.flag_outlined),
+                                  label: Text(
+                                    routeActive
+                                        ? 'Marcar rota como finalizada'
+                                        : 'Finalizar rota',
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(
+                                      color: AppColors.orange.withValues(alpha: 0.75),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                            ),
                                     ],
+                                  );
+                                    },
                                   ),
                           ),
                         ],
@@ -1094,6 +1408,7 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
                             : RoutePlanningActionBar(
                                 optimized: _optimized,
                                 isPro: isPro,
+                                optimizing: _optimizeInProgress,
                                 onOptimize: _otimizar,
                                 onUseImportOrder: _useImportOrder,
                                 onStart: () async {
@@ -1189,7 +1504,10 @@ class _RotaMapaScreenState extends ConsumerState<RotaMapaScreen> {
             ListenableBuilder(
               listenable: _sheetController,
               builder: (context, _) {
-                final size = _sheetController.isAttached ? _sheetController.size : 0.4;
+                final size = (_sheetController.isAttached
+                        ? (_sheetController.size * 15).round() / 15.0
+                        : 0.4)
+                    .clamp(_sheetMinSize, 0.88);
                 final controlsBottom = mapFloatingControlsBottom(
                   sheetChromeBottom: sheetChromeBottom,
                   sheetAreaHeight: sheetAreaHeight,

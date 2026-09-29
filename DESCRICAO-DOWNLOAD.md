@@ -8,7 +8,8 @@ Use nos grupos, WhatsApp, Telegram ou na bio. Ajuste o emoji se quiser.
 
 **ROTA PRIME** — app Android para rotas de entrega (planilha + mapa + Entregue / Não entregue).
 
-**Download oficial:** https://github.com/ALN2025/rotaprime/releases/latest
+**Download oficial:** https://github.com/ALN2025/rotaprime/releases/latest  
+**Link direto v1.2.8:** https://github.com/ALN2025/rotaprime/releases/download/v1.2.8/ROTA_PRIME.apk
 
 **Quer o plano PRO?**  
 Abra o app → **Mais** → **Configurações** → copie o **ID do aparelho** → toque no botão verde **Suporte** (WhatsApp) e peça a **chave de ativação**, informando seu **ID**.  
@@ -22,7 +23,8 @@ Depois, em **Configurações**, toque em **Assinatura / licença** e cole a chav
 Importe sua planilha, veja as paradas no GPS e marque **Entregue** ou **Não entregue**.
 
 ⬇️ **Baixar APK (oficial):**  
-https://github.com/ALN2025/rotaprime/releases/latest
+https://github.com/ALN2025/rotaprime/releases/download/v1.2.8/ROTA_PRIME.apk  
+(ou sempre a última: https://github.com/ALN2025/rotaprime/releases/latest )
 
 ⭐ **Ativar PRO (otimização + linha laranja no mapa):**  
 1. Instale o app e abra **Mais → Configurações**  

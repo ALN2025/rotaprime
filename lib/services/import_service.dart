@@ -13,6 +13,7 @@ import 'package:rota_prime/utils/delivery_address_core.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 import 'package:rota_prime/utils/parada_packages.dart';
 import 'package:rota_prime/utils/import_romaneio_ref.dart';
+import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
 import 'package:rota_prime/utils/import_parada_dedupe.dart';
 import 'package:rota_prime/utils/import_row_filters.dart';
 
@@ -156,8 +157,10 @@ class ImportService {
       final bairro = pickCell(row.cells, bairroAliases) ?? '';
       final zip = pickCell(row.cells, zipAliases) ?? '';
       final city = _cityForImport(pickCell(row.cells, cityAliases) ?? '', zip);
-      final seq = importRomaneioSequence(row.cells, displayOrder);
-      final stop = int.tryParse(pickCell(row.cells, stopAliases) ?? '') ?? 0;
+      final sheetOrder = importRomaneioSheetOrder(row.cells, displayOrder);
+      final seq = sheetOrder.sequence;
+      var stop = int.tryParse(pickCell(row.cells, stopAliases) ?? '') ?? 0;
+      if (stop <= 0 && seq > 0) stop = seq;
       final latStr = pickCell(row.cells, latAliases);
       final lngStr = pickCell(row.cells, lngAliases);
 
@@ -168,6 +171,7 @@ class ImportService {
       paradas.add(Parada()
         ..rotaId = rotaId
         ..sequence = seq
+        ..packageOrderLabel = sheetOrder.displayLabel
         ..stop = stop
         ..spxTn = tracking
         ..prazoEntrega = prazo
@@ -216,6 +220,7 @@ class ImportService {
       throw StateError('Nenhuma entrega válida após ler o PDF.');
     }
 
+    RomaneioCarrierBranding.normalizeLoggiCarriers(paradas);
     finalizePackageQtyFromImport(paradas);
     final packagesImported = sumPackageUnits(paradas);
 
@@ -283,28 +288,9 @@ class ImportService {
       try {
         g = await _geocode
             .geocodeParadaForImport(sample)
-            .timeout(const Duration(seconds: 22));
+            .timeout(const Duration(seconds: 20));
       } catch (_) {
         g = GeocodeResult.fallback();
-      }
-      if (!g.found) {
-        final raw = sample.rawLine.trim();
-        final q = raw.isNotEmpty ? raw : geocodeQueryForParada(sample);
-        if (q.isNotEmpty) {
-          try {
-            g = await _geocode
-                .geocode(
-                  q,
-                  allowFallback: false,
-                  cityHint: sample.city.trim().isNotEmpty
-                      ? sample.city
-                      : paradaCityAndUf(sample).city,
-                )
-                .timeout(const Duration(seconds: 18));
-          } catch (_) {
-            g = GeocodeResult.fallback();
-          }
-        }
       }
       if (g.found) {
         coords[key] = (g.lat, g.lng);
@@ -344,8 +330,8 @@ class ImportService {
 
     // 2ª passagem rápida (com progresso). A rota segue mesmo se faltar GPS —
     // o app tenta de novo depois em background.
-    const maxSecondPass = 30;
-    const passBudget = Duration(seconds: 50);
+    const maxSecondPass = 18;
+    const passBudget = Duration(seconds: 35);
     final todo = stillMissing.length > maxSecondPass
         ? stillMissing.take(maxSecondPass).toList()
         : stillMissing;

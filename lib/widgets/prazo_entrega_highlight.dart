@@ -18,10 +18,9 @@ class PrazoEntregaHighlight extends StatelessWidget {
     if (text.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      width: double.infinity,
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 10 : 12,
-        vertical: compact ? 8 : 10,
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 5 : 10,
       ),
       decoration: BoxDecoration(
         color: AppColors.orange.withValues(alpha: 0.18),

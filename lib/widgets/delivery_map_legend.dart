@@ -16,10 +16,10 @@ class MapLegendEntry {
 
 const kDeliveryMapLegendEntries = [
   MapLegendEntry(
-    color: Color(0xFF2196F3),
+    color: AppColors.orange,
     title: 'Você (GPS)',
     description:
-        'Seta/azul no mapa: sua posição agora. Com cadeado fechado o mapa não arrasta — só você e a linha laranja atualizam.',
+        'Círculo laranja com seta branca: sua posição agora. Com cadeado fechado o mapa não arrasta — só você e a linha laranja atualizam.',
   ),
   MapLegendEntry(
     color: AppColors.stopPending,

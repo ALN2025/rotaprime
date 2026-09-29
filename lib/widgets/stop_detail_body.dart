@@ -8,6 +8,7 @@ import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
 import 'package:rota_prime/widgets/carrier_pin_badge.dart';
 import 'package:rota_prime/widgets/circuit_stop_ui.dart';
 import 'package:rota_prime/widgets/prazo_entrega_highlight.dart';
+import 'package:rota_prime/widgets/bottom_sheet_parada.dart';
 import 'package:rota_prime/widgets/stop_action_panel.dart';
 
 class StopDetailBody extends StatelessWidget {
@@ -34,6 +35,9 @@ class StopDetailBody extends StatelessWidget {
     this.hideMetaHeader = false,
     this.headerOnly = false,
     this.omitAddressAndPackageTiles = false,
+    this.compactSheet = false,
+    this.onDuplicate,
+    this.onRemove,
   });
 
   final Parada parada;
@@ -59,6 +63,9 @@ class StopDetailBody extends StatelessWidget {
   final bool headerOnly;
   /// Evita repetir endereço/quantidade já mostrados no cabeçalho da entrega.
   final bool omitAddressAndPackageTiles;
+  final bool compactSheet;
+  final VoidCallback? onDuplicate;
+  final VoidCallback? onRemove;
 
   String get _idLabel => ParadaLabels.idLine(parada, stopIdDisplay);
 
@@ -177,7 +184,7 @@ class StopDetailBody extends StatelessWidget {
       }
     }
 
-    if (!hideAddressTile && _show(DeliveryFieldVisibility.address)) {
+    if (!hideAddressTile && _show(DeliveryFieldVisibility.address) && !compactSheet) {
       tiles.add(
         CircuitDetailTile(
           icon: Icons.description_outlined,
@@ -188,15 +195,27 @@ class StopDetailBody extends StatelessWidget {
     }
 
     if (_show(DeliveryFieldVisibility.spxTn) && parada.spxTn.isNotEmpty) {
-      tiles.add(
-        CircuitDetailTile(
-          icon: Icons.qr_code_2,
-          title: parada.spxTn,
-          subtitle: RomaneioCarrierBranding.deliveryCodeHint(
-            RomaneioCarrierBranding.carrierOf(parada),
+      if (compactSheet) {
+        tiles.add(
+          StopInfoRowCompact(
+            icon: Icons.qr_code_2,
+            text: parada.spxTn,
+            subtitle: RomaneioCarrierBranding.deliveryCodeHint(
+              RomaneioCarrierBranding.carrierOf(parada),
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        tiles.add(
+          CircuitDetailTile(
+            icon: Icons.qr_code_2,
+            title: parada.spxTn,
+            subtitle: RomaneioCarrierBranding.deliveryCodeHint(
+              RomaneioCarrierBranding.carrierOf(parada),
+            ),
+          ),
+        );
+      }
     }
 
     if (_show(DeliveryFieldVisibility.sequence)) {
@@ -242,11 +261,17 @@ class StopDetailBody extends StatelessWidget {
 
     if (_show(DeliveryFieldVisibility.zipcode) && parada.zipcode.isNotEmpty) {
       tiles.add(
-        CircuitDetailTile(
-          icon: Icons.markunread_mailbox_outlined,
-          title: parada.zipcode,
-          subtitle: 'CEP',
-        ),
+        compactSheet
+            ? StopInfoRowCompact(
+                icon: Icons.markunread_mailbox_outlined,
+                text: parada.zipcode,
+                subtitle: 'CEP',
+              )
+            : CircuitDetailTile(
+                icon: Icons.markunread_mailbox_outlined,
+                title: parada.zipcode,
+                subtitle: 'CEP',
+              ),
       );
     }
 
@@ -285,6 +310,32 @@ class StopDetailBody extends StatelessWidget {
     return tiles;
   }
 
+  Widget? _compactExtraRows() {
+    if (!compactSheet || !emphasizedStopHeader) return null;
+    final rows = <Widget>[];
+    if (_show(DeliveryFieldVisibility.sequence) && parada.sequence > 0) {
+      rows.add(
+        StopInfoRowCompact(
+          icon: Icons.format_list_numbered,
+          text: 'Sequência ${parada.sequence}',
+        ),
+      );
+    }
+    if (_show(DeliveryFieldVisibility.stop) && parada.stop > 0) {
+      rows.add(
+        StopInfoRowCompact(
+          icon: Icons.place_outlined,
+          text: 'Parada ${parada.stop}',
+        ),
+      );
+    }
+    if (rows.isEmpty) return null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detailTiles = _detailTiles();
@@ -303,6 +354,48 @@ class StopDetailBody extends StatelessWidget {
             selectedColumns: selectedColumns,
             displayAddress: _displayAddress,
           ),
+        ],
+      );
+    }
+
+    if (compactSheet && emphasizedStopHeader) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onClose != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                onPressed: onClose,
+                icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              ),
+            ),
+          CircuitStopMetaRow(
+            parada: parada,
+            totalStops: totalStops,
+            allParadas: allParadas,
+            stopIdDisplay: stopIdDisplay,
+            emphasized: true,
+            compactEmphasized: true,
+            selectedColumns: selectedColumns,
+            displayAddress: _displayAddress,
+          ),
+          if (onEdit != null)
+            StopParadaManageActions(
+              onEdit: onEdit!,
+              onDuplicate: onDuplicate,
+              onRemove: onRemove,
+            ),
+          if (_compactExtraRows() case final extra?) extra,
+          for (var i = 0; i < detailTiles.length; i++) detailTiles[i],
+          if (!hideActionBar) ...[
+            const SizedBox(height: 8),
+            _actionBar(),
+          ],
         ],
       );
     }

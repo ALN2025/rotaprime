@@ -3,7 +3,7 @@ import 'package:rota_prime/app/theme.dart';
 
 enum RouteMapPanelMode { map, list }
 
-/// Alternância Modo mapa / Modo lista — fixa acima do dock de ações.
+/// Setas + ícone de mapa no centro (sem abas largas).
 class RouteMapModeToggle extends StatelessWidget {
   const RouteMapModeToggle({
     super.key,
@@ -30,36 +30,29 @@ class RouteMapModeToggle extends StatelessWidget {
             top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _ModeChip(
-                      label: 'Modo mapa',
-                      icon: Icons.map_outlined,
-                      selected: mode == RouteMapPanelMode.map,
-                      onTap: () => onModeChanged(RouteMapPanelMode.map),
-                    ),
-                  ),
-                  Expanded(
-                    child: _ModeChip(
-                      label: 'Modo lista',
-                      icon: Icons.view_list_rounded,
-                      selected: mode == RouteMapPanelMode.list,
-                      onTap: () => onModeChanged(RouteMapPanelMode.list),
-                    ),
-                  ),
-                ],
-              ),
+            _ModeArrow(
+              icon: Icons.keyboard_arrow_up_rounded,
+              enabled: mode == RouteMapPanelMode.map,
+              onTap: () => onModeChanged(RouteMapPanelMode.map),
+              tooltip: 'Modo mapa',
+            ),
+            const SizedBox(width: 16),
+            Icon(
+              Icons.map_outlined,
+              size: 26,
+              color: mode == RouteMapPanelMode.map
+                  ? AppColors.orange
+                  : Colors.white.withValues(alpha: 0.45),
+            ),
+            const SizedBox(width: 16),
+            _ModeArrow(
+              icon: Icons.keyboard_arrow_down_rounded,
+              enabled: mode == RouteMapPanelMode.list,
+              onTap: () => onModeChanged(RouteMapPanelMode.list),
+              tooltip: 'Modo lista',
             ),
           ],
         ),
@@ -68,48 +61,43 @@ class RouteMapModeToggle extends StatelessWidget {
   }
 }
 
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
-    required this.label,
+class _ModeArrow extends StatelessWidget {
+  const _ModeArrow({
     required this.icon,
-    required this.selected,
+    required this.enabled,
     required this.onTap,
+    required this.tooltip,
   });
 
-  final String label;
   final IconData icon;
-  final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(4),
+    return Tooltip(
+      message: tooltip,
       child: Material(
-        color: selected ? AppColors.orange : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: enabled
+            ? AppColors.orange.withValues(alpha: 0.22)
+            : Colors.white.withValues(alpha: 0.06),
+        shape: CircleBorder(
+          side: BorderSide(
+            color: enabled ? AppColors.orange : Colors.white.withValues(alpha: 0.18),
+            width: 2,
+          ),
+        ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: selected ? Colors.white : Colors.white70,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.white70,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              icon,
+              size: 28,
+              color: enabled ? AppColors.orange : Colors.white.withValues(alpha: 0.35),
             ),
           ),
         ),

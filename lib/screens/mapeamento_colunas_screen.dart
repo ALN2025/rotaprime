@@ -123,10 +123,13 @@ class _MapeamentoColunasScreenState extends ConsumerState<MapeamentoColunasScree
                 saveOnly
                     ? 'Escolha o que aparece ao tocar na entrega (código, bairro, etc.)'
                     : merging
-                        ? 'Este arquivo será somado à rota que você já importou. '
+                        ? 'Este arquivo será somado à rota (Magalog, Loggi, Shopee…). '
+                            'Pins no mapa: 1, 2, 3… na ordem da rota. '
+                            'Código e sequência de cada transportadora ficam na lista e no painel. '
                             'Pacotes repetidos (mesmo ID) não entram de novo.'
-                        : 'Nada vem marcado — escolha o que quer ver na entrega (código, ordem, bairro…). '
-                            'Endereço sempre aparece, mesmo com tudo desmarcado.',
+                        : 'Escolha o que ver na entrega (código, Sequence, bairro…). '
+                            'Pins no mapa usam ordem da rota 1…N (vários romaneios juntos). '
+                            'Endereço sempre aparece.',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,

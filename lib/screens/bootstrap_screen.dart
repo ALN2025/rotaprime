@@ -102,7 +102,7 @@ class _BootstrapScreenState extends ConsumerState<BootstrapScreen> {
 
     try {
 
-      await ref.read(subscriptionProvider.notifier).reloadPlanFromServer().timeout(
+      await ref.read(subscriptionProvider.notifier).reloadPlanFromServer(force: true).timeout(
 
             const Duration(seconds: 14),
 

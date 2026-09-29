@@ -13,7 +13,10 @@ import 'package:rota_prime/utils/map_camera_utils.dart';
 import 'package:rota_prime/utils/map_route_fit.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 import 'package:rota_prime/utils/parada_map_markers.dart';
+import 'package:rota_prime/services/clustering_service.dart';
+import 'package:rota_prime/utils/rota_map_controller.dart';
 import 'package:rota_prime/widgets/rota_driver_map_marker.dart';
+import 'package:rota_prime/widgets/route_map_google.dart';
 
 class RouteMap extends StatefulWidget {
   /// Deslocamento vertical do ícone em relação ao ponto GPS (libera nome da rua).
@@ -35,6 +38,7 @@ class RouteMap extends StatefulWidget {
     this.navigationView = false,
     this.mapRotationDegrees = 0,
     this.mapController,
+    this.rotaMapController,
     this.onParadaTap,
     this.basemap = MapBasemap.standard,
     this.initialZoom = 13,
@@ -45,6 +49,11 @@ class RouteMap extends StatefulWidget {
     this.fastTileLayer = false,
     this.lightweightMarkers = false,
     this.hideCompletedStops = false,
+    this.networkTilesOnly = false,
+    this.viewportClusters,
+    this.pinIconStyles,
+    this.onCameraMove,
+    this.onCameraIdle,
   });
 
   final List<Parada> paradas;
@@ -62,6 +71,7 @@ class RouteMap extends StatefulWidget {
   final bool navigationView;
   final double mapRotationDegrees;
   final MapController? mapController;
+  final RotaMapController? rotaMapController;
   final void Function(Parada parada)? onParadaTap;
   final MapBasemap basemap;
   final double initialZoom;
@@ -77,6 +87,14 @@ class RouteMap extends StatefulWidget {
   final bool lightweightMarkers;
   /// Oculta pins já entregues / não entregues (mapa só com o que falta).
   final bool hideCompletedStops;
+  /// Sem leitura de disco por tile — mapa mais fluido com 50+ paradas.
+  final bool networkTilesOnly;
+  /// Pins visíveis após bounds + cluster (<20 m).
+  final List<MapPinCluster>? viewportClusters;
+  /// Cache de estilos (~32 px) — equivalente BitmapDescriptor.
+  final Map<String, TextStyle>? pinIconStyles;
+  final VoidCallback? onCameraMove;
+  final VoidCallback? onCameraIdle;
 
   @override
   State<RouteMap> createState() => _RouteMapState();
@@ -106,12 +124,16 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
     _applyInitialCamera(widget);
     _mapZoom = widget.initialZoom;
     MapTilePrefetch.cacheDirectory();
-    _driverMoveCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 260),
-    )..addListener(() {
-        if (mounted) setState(() {});
-      });
+    final animateDriver =
+        widget.navigationView || widget.legRouteOnly;
+    _driverMoveCtrl = animateDriver
+        ? (AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 260),
+          )..addListener(() {
+              if (mounted) setState(() {});
+            }))
+        : null;
     final p = widget.driverPosition;
     if (p != null) {
       _driverAnimFrom = p;
@@ -137,17 +159,128 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
         .length;
     if (newCoords > 0 && (oldCoords == 0 || newCoords > oldCoords)) {
       _applyInitialCamera(widget);
-      final ctrl = widget.mapController;
-      if (ctrl != null) {
+      final rotaCtrl = widget.rotaMapController;
+      if (rotaCtrl != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          fitMapControllerToParadas(ctrl, widget.paradas);
+          fitRotaMapControllerToParadas(
+            rotaCtrl,
+            widget.paradas,
+            focusNear: widget.driverPosition,
+            ultraFast: widget.paradas.length >= 40,
+          );
+        });
+      } else if (widget.mapController case final ctrl?) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          fitMapControllerToParadas(
+            ctrl,
+            widget.paradas,
+            focusNear: widget.driverPosition,
+            ultraFast: widget.paradas.length >= 40,
+          );
         });
       }
     }
     _syncDriverAnimation(oldWidget);
+    if (oldWidget.basemap != widget.basemap) {
+      if (!MapBasemap.usesGoogleMaps(widget.basemap)) {
+        widget.rotaMapController?.setGoogleLive(false);
+      }
+      setState(() {});
+    }
+  }
+
+  Parada? _paradaForCluster(MapPinCluster cluster) {
+    for (final p in widget.paradas) {
+      if (p.id == cluster.representativeParadaId) return p;
+    }
+    return null;
+  }
+
+  TextStyle? _pinTextStyle(Parada p, {required bool selected, bool cluster = false}) {
+    final styles = widget.pinIconStyles;
+    if (styles == null) return null;
+    if (cluster) return styles['cluster'];
+    if (ParadaLabels.isLateAddedPackage(p)) {
+      return styles[ParadaLabels.latePackageMarker];
+    }
+    if (selected) return styles['pin32_selected'];
+    if (widget.lightweightMarkers) return styles['pin32_compact'];
+    return styles['pin32'];
+  }
+
+  List<Marker> _buildStopMarkersFromViewport(List<MapPinCluster> clusters) {
+    return [
+      for (final c in clusters)
+        if (_paradaForCluster(c) case final p?)
+          Marker(
+            point: c.latLng,
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            child: RepaintBoundary(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onParadaTap == null
+                    ? null
+                    : () => widget.onParadaTap!(p),
+                child: _ViewportStopPin(
+                  label: c.displayLabel,
+                  selected: _isSelected(p),
+                  merged: c.isMergedCluster,
+                  pinTextStyle: _pinTextStyle(
+                    p,
+                    selected: _isSelected(p),
+                    cluster: c.isMergedCluster,
+                  ),
+                ),
+              ),
+            ),
+          ),
+    ];
+  }
+
+  List<Marker> _buildStopMarkers(
+    List<Parada> stopMarkers,
+    Map<int, LatLng> displayPoints,
+    Map<int, String> pinLabels,
+  ) {
+    return [
+      for (final p in stopMarkers)
+        Marker(
+          point: displayPoints[p.id] ?? LatLng(p.latitude!, p.longitude!),
+          width: _markerWidth(p),
+          height: _markerHeight(p),
+          alignment: Alignment.bottomCenter,
+          child: RepaintBoundary(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onParadaTap == null ? null : () => widget.onParadaTap!(p),
+              child: _StopPin(
+                allParadas: widget.paradas,
+                parada: p,
+                pinLabel: pinLabels[p.id],
+                pinTextStyle: _pinTextStyle(p, selected: _isSelected(p)),
+                selected: _isSelected(p),
+                highlighted: _isHighlighted(p),
+                compact: widget.lightweightMarkers,
+                deliveryMode: widget.legRouteOnly,
+                showMapCallout: widget.showStopCallouts &&
+                    !widget.legRouteOnly &&
+                    !widget.navigationView &&
+                    _isSelected(p),
+              ),
+            ),
+          ),
+        ),
+    ];
   }
 
   void _syncDriverAnimation(RouteMap oldWidget) {
+    if (!widget.navigationView && !widget.legRouteOnly) {
+      _driverAnimFrom = null;
+      _driverAnimTo = null;
+      return;
+    }
     final next = widget.driverPosition;
     if (next == null) {
       _driverAnimFrom = null;
@@ -166,6 +299,9 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   }
 
   LatLng? get _displayDriverPosition {
+    if (!widget.navigationView && !widget.legRouteOnly) {
+      return widget.driverPosition;
+    }
     final to = _driverAnimTo ?? widget.driverPosition;
     if (to == null) return null;
     final from = _driverAnimFrom ?? to;
@@ -178,6 +314,9 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   }
 
   double get _displayDriverHeading {
+    if (!widget.navigationView && !widget.legRouteOnly) {
+      return widget.driverHeading;
+    }
     final to = _driverAnimTo != null ? _driverHeadingTo : widget.driverHeading;
     final from = _driverHeadingFrom;
     final t = Curves.easeOutCubic.transform(_driverMoveCtrl?.value ?? 1.0);
@@ -197,8 +336,17 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
       paradas: w.paradas,
       routePoints: w.routePoints,
       highlightStop: w.highlightStop,
+      driver: w.driverPosition,
     );
-    _initialZoom = w.initialZoom;
+    final cluster = mapFitPointsFromParadas(
+      w.paradas,
+      regionAnchor: w.driverPosition,
+    );
+    if (cluster.length >= 2) {
+      _initialZoom = mapCityZoomForSpreadKm(mapPointsSpreadKm(cluster));
+    } else {
+      _initialZoom = w.initialZoom;
+    }
   }
 
   Parada? _paradaById(int id) {
@@ -323,8 +471,11 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   MapBasemap get _effectiveBasemap => widget.basemap;
 
   List<Widget> _basemapTileLayers(MapBasemap basemap) {
-    final pan = widget.fastTileLayer ? 1 : 2;
-    final keep = widget.fastTileLayer ? 1 : 2;
+    final lite = widget.lightweightMarkers ||
+        widget.networkTilesOnly ||
+        widget.fastTileLayer;
+    final pan = lite ? 1 : 2;
+    final keep = lite ? 1 : 2;
     final layers = <Widget>[
       _mapTileLayer(
         basemap: basemap,
@@ -378,35 +529,81 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
         basemap: basemap,
         labelsOverlay: labelsOverlay,
         labelOverlayIndex: labelOverlayIndex,
+        preferNetwork:
+            widget.networkTilesOnly || widget.basemap == MapBasemap.dark,
       ),
     );
   }
 
+  MapController? get _flutterMapController =>
+      widget.rotaMapController?.flutterController ?? widget.mapController;
+
   @override
   Widget build(BuildContext context) {
     final tiles = _effectiveBasemap;
-    final stopMarkers = representativeParadasForMap(
-      widget.paradas,
-      hideCompleted: widget.hideCompletedStops,
-    )
-      ..sort((a, b) {
-        final sa = _isSelected(a);
-        final sb = _isSelected(b);
-        if (sa == sb) return 0;
-        return sa ? 1 : -1;
-      });
+    if (MapBasemap.usesGoogleMaps(tiles)) {
+      return RouteMapGoogle(
+        paradas: widget.paradas,
+        routePoints: widget.routePoints,
+        navigationLegPoints: widget.navigationLegPoints,
+        legRouteOnly: widget.legRouteOnly,
+        height: widget.height,
+        interactive: widget.interactive,
+        selectedParadaId: widget.selectedParadaId,
+        driverPosition: widget.driverPosition,
+        driverHeading: widget.driverHeading,
+        navigationView: widget.navigationView,
+        allowRoutePolylines: widget.allowRoutePolylines,
+        lightweightMarkers: widget.lightweightMarkers,
+        hideCompletedStops: widget.hideCompletedStops,
+        viewportClusters: widget.viewportClusters,
+        basemap: tiles,
+        rotaMapController: widget.rotaMapController,
+        onParadaTap: widget.onParadaTap,
+        onCameraMove: () {
+          widget.onUserMapGesture?.call();
+          widget.onCameraMove?.call();
+        },
+        onCameraIdle: widget.onCameraIdle,
+        initialZoom: widget.initialZoom,
+      );
+    }
+    final List<Marker> stopMarkerWidgets;
+    final clusters = widget.viewportClusters;
+    if (clusters != null) {
+      stopMarkerWidgets = _buildStopMarkersFromViewport(clusters);
+    } else {
+      final stopMarkers = representativeParadasForMap(
+        widget.paradas,
+        hideCompleted: widget.hideCompletedStops,
+      )
+        ..sort((a, b) {
+          final sa = _isSelected(a);
+          final sb = _isSelected(b);
+          if (sa == sb) return 0;
+          return sa ? 1 : -1;
+        });
+      final displayPoints = buildMapMarkerDisplayPoints(widget.paradas);
+      final pinLabels = ParadaLabels.mapPinDisplayLabelsForRepresentatives(
+        widget.paradas,
+        stopMarkers,
+      );
+      stopMarkerWidgets = _buildStopMarkers(stopMarkers, displayPoints, pinLabels);
+    }
 
-    return SizedBox(
+    return RepaintBoundary(
+      child: SizedBox(
       height: widget.height,
       child: FlutterMap(
-        mapController: widget.mapController,
+        key: ValueKey<String>('flutter_map_${tiles.name}'),
+        mapController: _flutterMapController,
         options: MapOptions(
           initialCenter: _initialCenter,
           initialZoom: _initialZoom,
           initialRotation: widget.mapRotationDegrees,
-          minZoom: 5,
+          minZoom: widget.lightweightMarkers || widget.networkTilesOnly ? 7 : 5,
           maxZoom: MapBasemap.appMaxZoom,
-          backgroundColor: AppColors.background,
+          backgroundColor: const Color(0xFF2A2A32),
           interactionOptions: InteractionOptions(
             flags: widget.interactive
                 ? (widget.allowRotation
@@ -417,11 +614,18 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
             rotationThreshold: 12,
           ),
           onPositionChanged: (camera, hasGesture) {
-            final z = camera.zoom;
-            if ((z - _mapZoom).abs() > 0.2) {
-              setState(() => _mapZoom = z);
+            if (widget.legRouteOnly || widget.navigationView) {
+              final z = camera.zoom;
+              if ((z - _mapZoom).abs() > 0.45) {
+                setState(() => _mapZoom = z);
+              }
             }
-            if (hasGesture) widget.onUserMapGesture?.call();
+            if (hasGesture) {
+              widget.onUserMapGesture?.call();
+              widget.onCameraMove?.call();
+            } else {
+              widget.onCameraIdle?.call();
+            }
           },
         ),
         children: [
@@ -429,29 +633,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
           ..._routePolylines(),
           MarkerLayer(
             markers: [
-              for (final p in stopMarkers)
-                Marker(
-                  point: mapMarkerDisplayPoint(widget.paradas, p),
-                  width: _markerWidth(p),
-                  height: _markerHeight(p),
-                  alignment: Alignment.bottomCenter,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onParadaTap == null ? null : () => widget.onParadaTap!(p),
-                    child: _StopPin(
-                      allParadas: widget.paradas,
-                      parada: p,
-                      selected: _isSelected(p),
-                      highlighted: _isHighlighted(p),
-                      compact: widget.lightweightMarkers,
-                      deliveryMode: widget.legRouteOnly,
-                      showMapCallout: widget.showStopCallouts &&
-                          !widget.legRouteOnly &&
-                          !widget.navigationView &&
-                          _isSelected(p),
-                    ),
-                  ),
-                ),
+              ...stopMarkerWidgets,
               if (_displayDriverPosition != null)
                 Marker(
                   point: _displayDriverPosition!,
@@ -468,6 +650,7 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
             ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -497,10 +680,61 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
   }
 }
 
+/// Pin leve (viewport / 100+ paradas) — 32×32, sem sombra pesada.
+class _ViewportStopPin extends StatelessWidget {
+  const _ViewportStopPin({
+    required this.label,
+    required this.selected,
+    required this.merged,
+    this.pinTextStyle,
+  });
+
+  final String label;
+  final bool selected;
+  final bool merged;
+  final TextStyle? pinTextStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = merged
+        ? AppColors.orange
+        : (selected ? AppColors.orange : const Color(0xFF6B6B73));
+    return Container(
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: fill,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? Colors.white : Colors.white.withValues(alpha: 0.85),
+          width: selected ? 2.5 : 1.5,
+        ),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.fade,
+        softWrap: false,
+        style: pinTextStyle ??
+            TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: merged ? 11 : 12,
+              height: 1,
+            ),
+      ),
+    );
+  }
+}
+
 class _StopPin extends StatelessWidget {
   const _StopPin({
     required this.allParadas,
     required this.parada,
+    this.pinLabel,
+    this.pinTextStyle,
     required this.selected,
     required this.highlighted,
     this.compact = false,
@@ -510,6 +744,8 @@ class _StopPin extends StatelessWidget {
 
   final List<Parada> allParadas;
   final Parada parada;
+  final String? pinLabel;
+  final TextStyle? pinTextStyle;
   final bool selected;
   final bool highlighted;
   final bool compact;
@@ -556,7 +792,7 @@ class _StopPin extends StatelessWidget {
             size: const Size(14, 10),
             painter: _PinNeedlePainter(color: _fillColor),
           )
-        else ...[
+        else if (!compact) ...[
           const SizedBox(height: 2),
           Container(
             width: 6,
@@ -608,14 +844,17 @@ class _StopPin extends StatelessWidget {
       alignment: Alignment.center,
       child: showOrderNumber
           ? Text(
-              ParadaLabels.mapPinDisplayLabel(allParadas, parada),
-              style: TextStyle(
-                color: ParadaLabels.isLateAddedPackage(parada) ? Colors.amber : Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: ParadaLabels.isLateAddedPackage(parada)
-                    ? (selected ? 11 : 9)
-                    : (selected ? 15 : (highlighted ? 12 : 10)),
-              ),
+              pinLabel ?? ParadaLabels.mapPinDisplayLabel(allParadas, parada),
+              style: pinTextStyle ??
+                  TextStyle(
+                    color: ParadaLabels.isLateAddedPackage(parada)
+                        ? Colors.amber
+                        : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: ParadaLabels.isLateAddedPackage(parada)
+                        ? (selected ? 11 : 9)
+                        : (selected ? 15 : (highlighted ? 12 : 10)),
+                  ),
             )
           : Icon(_icon, color: Colors.white, size: selected ? 20 : 14),
     );

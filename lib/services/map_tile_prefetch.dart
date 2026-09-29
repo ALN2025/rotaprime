@@ -19,12 +19,36 @@ class MapTilePrefetch {
   /// Caminho do cache após o primeiro [cacheDirectory] (leitura síncrona no mapa).
   static String? cacheRootSync;
 
+  static int _legacyDarkCachePurgedGen = 0;
+  static const _legacyPurgeGeneration = 5;
+
+  /// Apaga pastas antigas (Carto/Google/Esri Dark Gray sem ruas no zoom).
+  static void purgeLegacyDarkTileCaches(String cacheRoot) {
+    if (_legacyDarkCachePurgedGen >= _legacyPurgeGeneration) return;
+    _legacyDarkCachePurgedGen = _legacyPurgeGeneration;
+    const legacy = <String>[
+      'dark',
+      'dark_carto_osm',
+      'dark_carto_osm_v2',
+      'dark_carto_osm_labels_v2',
+      'dark_esri_base_v3',
+      'dark_esri_ref_v3',
+    ];
+    for (final folder in legacy) {
+      try {
+        final d = Directory('$cacheRoot/$folder');
+        if (d.existsSync()) d.deleteSync(recursive: true);
+      } catch (_) {}
+    }
+  }
+
   static Future<String> cacheDirectory() async {
     if (cacheRootSync != null) return cacheRootSync!;
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/map_tiles');
     if (!dir.existsSync()) dir.createSync(recursive: true);
     cacheRootSync = dir.path;
+    purgeLegacyDarkTileCaches(cacheRootSync!);
     return cacheRootSync!;
   }
 
@@ -107,7 +131,7 @@ class MapTilePrefetch {
     downloaded += await _prefetchTemplate(
       cacheRoot: cacheRoot,
       cacheFolder: basemap.tileCacheFolder(labels: false),
-      urlTemplate: basemap.urlTemplate,
+      basemap: basemap,
       minLat: minLat,
       minLng: minLng,
       maxLat: maxLat,
@@ -122,7 +146,8 @@ class MapTilePrefetch {
       downloaded += await _prefetchTemplate(
         cacheRoot: cacheRoot,
         cacheFolder: basemap.tileCacheFolder(labels: true, labelIndex: i),
-        urlTemplate: overlays[i],
+        basemap: basemap,
+        urlTemplateOverride: overlays[i],
         minLat: minLat,
         minLng: minLng,
         maxLat: maxLat,
@@ -140,7 +165,8 @@ class MapTilePrefetch {
 Future<int> _prefetchTemplate({
   required String cacheRoot,
   required String cacheFolder,
-  required String urlTemplate,
+  required MapBasemap basemap,
+  String? urlTemplateOverride,
   required double minLat,
   required double minLng,
   required double maxLat,
@@ -157,16 +183,21 @@ Future<int> _prefetchTemplate({
       final path = '$cacheRoot/$cacheFolder/$z/${t.x}/${t.y}.png';
       final file = File(path);
       if (file.existsSync()) continue;
-      final url = MapBasemap.expandTileUrl(urlTemplate)
-          .replaceAll('{z}', '$z')
-          .replaceAll('{x}', '${t.x}')
-          .replaceAll('{y}', '${t.y}');
+      final url = urlTemplateOverride == null
+          ? basemap.tileUrlFor(z, t.x, t.y)
+          : MapBasemap.resolveTileUrlTemplate(
+              urlTemplateOverride,
+              z,
+              t.x,
+              t.y,
+              subdomains: basemap.subdomains,
+            );
       try {
         final res = await http.get(
           Uri.parse(url),
           headers: const {'User-Agent': _tileUserAgent},
         );
-        if (res.statusCode == 200) {
+        if (res.statusCode == 200 && _looksLikePng(res.bodyBytes)) {
           file.parent.createSync(recursive: true);
           await file.writeAsBytes(res.bodyBytes);
           downloaded++;
@@ -208,6 +239,15 @@ List<_TileCoord> _tilesForBounds(
 
 int _lonToTileX(double lon, int z) {
   return ((lon + 180) / 360 * (1 << z)).floor();
+}
+
+bool _looksLikePng(List<int> bytes) {
+  if (bytes.length < 600) return false;
+  if (bytes.length < 8) return false;
+  return bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4E &&
+      bytes[3] == 0x47;
 }
 
 int _latToTileY(double lat, int z) {

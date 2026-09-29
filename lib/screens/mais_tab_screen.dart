@@ -31,7 +31,7 @@ class MaisTabScreen extends ConsumerWidget {
               context,
               icon: Icons.settings_outlined,
               title: 'Configurações',
-              subtitle: 'Mapa, GPS, licença PRO, ID do aparelho',
+              subtitle: 'Mapa, GPS, assinatura PRO, ID do aparelho',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ConfiguracoesScreen()),
               ),

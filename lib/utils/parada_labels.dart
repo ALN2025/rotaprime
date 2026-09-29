@@ -4,6 +4,7 @@ import 'package:rota_prime/models/romaneio_carrier.dart';
 import 'package:rota_prime/providers/map_settings_provider.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 import 'package:rota_prime/utils/parada_packages.dart';
+import 'package:rota_prime/utils/romaneio_package_order.dart';
 
 /// Rótulos estilo Circuit: ordem da rota (1/90) ≠ parada logística (Stop) ≠ seq. pacote.
 
@@ -13,19 +14,29 @@ class ParadaLabels {
 
 
 
-  /// Pacote sem número de ordem no romaneio (ex.: incluído manualmente no app).
+  /// Só entrega incluída no app sem ordem nem código (≠ Shopee `+2` no romaneio).
 
   static const latePackageMarker = '++';
 
 
 
-  static bool hasShopeeSequence(Parada p) => p.sequence > 0;
+  static bool hasShopeeSequence(Parada p) =>
+      p.sequence > 0 || isShopeePlusPackageOrder(p);
 
 
 
-  /// Manual/QR sem ordem no romaneio — não confundir com PDF/planilha importada.
-  static bool isLateAddedPackage(Parada p) =>
-      !hasShopeeSequence(p) && p.spxTn.trim().isEmpty;
+  static bool isShopeePlusPackageOrder(Parada p) =>
+      isShopeePlusOrderLabel(p.packageOrderLabel);
+
+
+
+  /// Manual/QR no app — sem ordem, sem `+N` Shopee, sem tracking.
+  static bool isLateAddedPackage(Parada p) {
+    if (isShopeePlusPackageOrder(p)) return false;
+    if (p.sequence > 0) return false;
+    if (p.spxTn.trim().isNotEmpty) return false;
+    return true;
+  }
 
 
 
@@ -41,9 +52,19 @@ class ParadaLabels {
 
 
 
+  static bool usesShopeeBagOrderOnChip(Parada p) {
+    return p.romaneioLayout == ImportRomaneioLayout.shopeeOrdemPacote ||
+        p.romaneioCarrier == RomaneioCarrier.shopee;
+  }
+
   /// Código real do romaneio (Shopee, PDF, ML…) — listas e painel da entrega.
   static String romaneioPackageRef(Parada p) {
     if (isLateAddedPackage(p)) return latePackageMarker;
+    final plusLabel = p.packageOrderLabel.trim();
+    if (plusLabel.isNotEmpty) return plusLabel;
+    if (usesShopeeBagOrderOnChip(p) && p.sequence > 0) {
+      return '${p.sequence}';
+    }
     final tn = p.spxTn.trim();
     if (tn.isNotEmpty) return tn;
     if (p.sequence > 0) return '${p.sequence}';
@@ -51,26 +72,16 @@ class ParadaLabels {
     return latePackageMarker;
   }
 
-  /// Chip sacola: Shopee = ordem do pacote; Magalog/Loggi/mista = pin da rota (1…N).
+  /// Chip sacola / ícone pacote: código do romaneio (Shopee, Magalog, Loggi…) — não a ordem da rota.
   static String packageOrderDisplay(Parada p, {List<Parada>? route}) {
     if (isLateAddedPackage(p)) return latePackageMarker;
-    if (route != null && routeUsesUnifiedPinOrder(route)) {
-      return mapPinLabel(route, p);
-    }
-    if (p.romaneioCarrier == RomaneioCarrier.shopee && p.sequence > 0) {
-      return '${p.sequence}';
-    }
-    if (p.romaneioLayout == ImportRomaneioLayout.shopeeOrdemPacote && p.sequence > 0) {
-      return '${p.sequence}';
-    }
     return romaneioPackageRef(p);
   }
 
 
 
   static List<Parada> _rowsAtSameStop(List<Parada> all, Parada p) {
-    final key = deliveryAddressKey(p);
-    return all.where((x) => deliveryAddressKey(x) == key).toList();
+    return paradasAtSameBuildingSite(all, p);
   }
 
   static List<String> pendingPackageOrderLabelsAtStop(List<Parada> all, Parada p) {
@@ -126,21 +137,31 @@ class ParadaLabels {
 
 
 
-  /// Várias transportadoras na mesma rota (Magalog + Loggi + Shopee…) → pin 1…N unificado.
-  static bool routeUsesUnifiedPinOrder(List<Parada> all) {
-    if (all.isEmpty) return false;
-    final carriers = all.map((p) => p.romaneioCarrier).toSet();
-    if (carriers.length > 1) return true;
-    final only = carriers.single;
-    return only != RomaneioCarrier.shopee &&
-        only != RomaneioCarrier.generico;
-  }
+  /// Sempre pin 1…N na rota (Magalog + Loggi + Shopee na mesma entrega).
+  static bool routeUsesUnifiedPinOrder(List<Parada> all) => all.isNotEmpty;
 
   /// Texto no círculo do pin — vários pacotes no mesmo AP/endereço = quantidade.
   static String mapPinDisplayLabel(List<Parada> all, Parada p) {
     final count = packageCountAtStop(all, p);
     if (count > 1) return '$count';
     return mapPinLabel(all, p);
+  }
+
+  /// Rótulos dos pins representativos — uma passada (rotas 100+ paradas).
+  static Map<int, String> mapPinDisplayLabelsForRepresentatives(
+    List<Parada> all,
+    List<Parada> representatives,
+  ) {
+    final out = <int, String>{};
+    for (final p in representatives) {
+      final count = packageCountAtStop(all, p);
+      if (count > 1) {
+        out[p.id] = '$count';
+        continue;
+      }
+      out[p.id] = mapPinLabel(all, p);
+    }
+    return out;
   }
 
   /// Pacotes pendentes no pin (ordens) — painel ao tocar.
@@ -152,18 +173,11 @@ class ParadaLabels {
     return labels.join(', ');
   }
 
-  /// Pin no mapa: Shopee pura = ordem do pacote; mista / privadas = ordem na rota (1…N).
+  /// Pin no mapa = ordem na rota (1…N), todas as transportadoras.
+  /// Código do pacote (Shopee, +N, ID Loggi/Magalog) fica no chip e no painel — não no pin.
+  /// Vários pacotes no mesmo endereço: quantidade no pin ([mapPinDisplayLabel]).
   static String mapPinLabel(List<Parada> all, Parada p) {
     if (isLateAddedPackage(p)) return latePackageMarker;
-    if (routeUsesUnifiedPinOrder(all) && p.ordemExibicao > 0) {
-      return '${p.ordemExibicao}';
-    }
-    if (p.romaneioCarrier == RomaneioCarrier.shopee && p.sequence > 0) {
-      return '${p.sequence}';
-    }
-    if (p.romaneioLayout == ImportRomaneioLayout.shopeeOrdemPacote && p.sequence > 0) {
-      return '${p.sequence}';
-    }
     if (p.ordemExibicao > 0) return '${p.ordemExibicao}';
     final idx = all.indexWhere((x) => x.id == p.id && p.id > 0);
     if (idx >= 0) return '${idx + 1}';
@@ -190,7 +204,7 @@ class ParadaLabels {
 
     if (!isLateAddedPackage(p)) return null;
 
-    return 'Sem ordem no romaneio — incluído manualmente no app (++)';
+    return 'Sem ordem no romaneio — incluído manualmente no app ($latePackageMarker)';
 
   }
 
@@ -376,10 +390,10 @@ class ParadaLabels {
         nextPackage.stop > 0 ? 'parada ${nextPackage.stop}' : 'este endereço';
 
     if (pending > 1) {
-      return 'Mesma $stopPart — faltam $pending pacotes: ${pendingLabels.join(', ')}';
+      return 'Faltam $pending pacotes aqui (${pendingLabels.join(', ')}). Toque Entregue de novo.';
     }
 
-    return 'Mesma $stopPart — falta o pacote ordem $ordem';
+    return 'Falta 1 pacote aqui (ordem $ordem). Toque Entregue de novo.';
   }
 
 
@@ -400,17 +414,6 @@ class ParadaLabels {
   }
 
   static String packageQtyCompact(List<Parada> all, Parada p) {
-    if (routeUsesUnifiedPinOrder(all)) {
-      final pin = mapPinLabel(all, p);
-      final ref = romaneioPackageRef(p);
-      final parts = <String>['Pin $pin'];
-      if (ref.isNotEmpty && ref != pin && ref != latePackageMarker) {
-        parts.add('ID $ref');
-      }
-      final prazo = p.prazoEntrega.trim();
-      if (prazo.isNotEmpty) parts.add('Prazo $prazo');
-      return parts.join(' · ');
-    }
     final labels = packageOrderLabelsAtStop(all, p);
     final count = packageCountAtStop(all, p);
     final stopPart = p.stop > 0 ? 'Parada ${p.stop}' : 'Rota ${p.ordemExibicao}';

@@ -50,30 +50,64 @@ List<Parada> representativeParadasForMap(
 
 /// Prédio/condomínio: vários APs no mesmo GPS → pins em círculo. Casa: pin no GPS da casa.
 LatLng mapMarkerDisplayPoint(List<Parada> all, Parada p) {
-  final lat = p.latitude!;
-  final lng = p.longitude!;
-  if (!isMultiUnitBuildingSite(p)) return LatLng(lat, lng);
+  return buildMapMarkerDisplayPoints(all)[p.id] ??
+      LatLng(p.latitude!, p.longitude!);
+}
+
+/// Uma passada — evita O(n²) ao desenhar 100+ pins (travava o celular).
+Map<int, LatLng> buildMapMarkerDisplayPoints(List<Parada> all) {
   const eps = 0.000018;
-  final keyOrder = <String>[];
-  for (final x in all) {
-    if (!isMultiUnitBuildingSite(x)) continue;
-    if (x.latitude == null || x.longitude == null) continue;
-    if ((x.latitude! - lat).abs() > eps || (x.longitude! - lng).abs() > eps) {
+  const radiusM = 26.0;
+  final out = <int, LatLng>{};
+
+  for (final p in all) {
+    if (p.latitude == null || p.longitude == null) continue;
+    if (!isMultiUnitBuildingSite(p)) {
+      out[p.id] = LatLng(p.latitude!, p.longitude!);
+    }
+  }
+
+  final buildingGroups = <String, List<Parada>>{};
+  for (final p in all) {
+    if (p.latitude == null || p.longitude == null) continue;
+    if (!isMultiUnitBuildingSite(p)) continue;
+    final lat = p.latitude!;
+    final lng = p.longitude!;
+    final cell =
+        '${(lat / eps).round()}|${(lng / eps).round()}';
+    buildingGroups.putIfAbsent(cell, () => []).add(p);
+  }
+
+  for (final group in buildingGroups.values) {
+    if (group.isEmpty) continue;
+    final lat = group.first.latitude!;
+    final lng = group.first.longitude!;
+    final keyOrder = <String>[];
+    for (final x in group) {
+      final k = mapPinGroupKey(x);
+      if (!keyOrder.contains(k)) keyOrder.add(k);
+    }
+    keyOrder.sort();
+    if (keyOrder.length <= 1) {
+      for (final x in group) {
+        out[x.id] = LatLng(lat, lng);
+      }
       continue;
     }
-    final k = mapPinGroupKey(x);
-    if (!keyOrder.contains(k)) keyOrder.add(k);
+    for (var idx = 0; idx < keyOrder.length; idx++) {
+      final k = keyOrder[idx];
+      final angle = (idx / keyOrder.length) * 2 * math.pi;
+      final dLat = radiusM * math.cos(angle) / 111320.0;
+      final dLng =
+          radiusM * math.sin(angle) / (111320.0 * math.cos(lat * math.pi / 180));
+      final point = LatLng(lat + dLat, lng + dLng);
+      for (final x in group) {
+        if (mapPinGroupKey(x) == k) out[x.id] = point;
+      }
+    }
   }
-  keyOrder.sort();
-  if (keyOrder.length <= 1) return LatLng(lat, lng);
-  final myKey = mapPinGroupKey(p);
-  final idx = keyOrder.indexOf(myKey);
-  if (idx < 0) return LatLng(lat, lng);
-  const radiusM = 26.0;
-  final angle = (idx / keyOrder.length) * 2 * math.pi;
-  final dLat = radiusM * math.cos(angle) / 111320.0;
-  final dLng = radiusM * math.sin(angle) / (111320.0 * math.cos(lat * math.pi / 180));
-  return LatLng(lat + dLat, lng + dLng);
+
+  return out;
 }
 
 enum MapPinDeliveryState { pending, delivered, failed }

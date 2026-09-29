@@ -16,6 +16,8 @@ import 'package:rota_prime/services/offline_license_service.dart';
 
 import 'package:rota_prime/services/online_license_service.dart';
 
+import 'package:rota_prime/services/subscription_pro_until_policy.dart';
+
 
 
 const _prefIsPro = 'rota_prime_is_pro';
@@ -36,9 +38,11 @@ const _prefTrialStartMs = 'rota_prime_pro_trial_start_ms';
 
 const _prefTrialRegisteredOnline = 'rota_prime_trial_registered_online';
 
+const _prefLicensedRegisteredOnline = 'rota_prime_licensed_registered_online';
 
 
-enum PlanAccessKind { free, trialPro, licensedPro }
+
+enum PlanAccessKind { free, trialPro, subscriptionPro, licensedPro }
 
 
 
@@ -54,6 +58,8 @@ class SubscriptionState {
 
     this.pendingRevokedNotice = false,
 
+    this.proSubscriptionUntil,
+
   });
 
 
@@ -66,11 +72,22 @@ class SubscriptionState {
 
   final bool pendingRevokedNotice;
 
+  /// PRO mensal (Mercado Pago) — válido até esta data (local).
+  final DateTime? proSubscriptionUntil;
+
+
+
+  bool get hasActiveSubscription {
+    final until = proSubscriptionUntil;
+    if (until == null) return false;
+    return DateTime.now().isBefore(until);
+  }
+
 
 
   bool get isTrialActive {
 
-    if (isLicensedPro || trialStartedAt == null) return false;
+    if (isLicensedPro || hasActiveSubscription || trialStartedAt == null) return false;
 
     final elapsed = DateTime.now().difference(trialStartedAt!).inDays;
 
@@ -82,13 +99,15 @@ class SubscriptionState {
 
   /// Recursos PRO (otimização, linha laranja, etc.).
 
-  bool get isPro => isLicensedPro || isTrialActive;
+  bool get isPro => isLicensedPro || hasActiveSubscription || isTrialActive;
 
 
 
   PlanAccessKind get accessKind {
 
     if (isLicensedPro) return PlanAccessKind.licensedPro;
+
+    if (hasActiveSubscription) return PlanAccessKind.subscriptionPro;
 
     if (isTrialActive) return PlanAccessKind.trialPro;
 
@@ -116,6 +135,8 @@ class SubscriptionState {
 
         PlanAccessKind.trialPro => 'Trial PRO',
 
+        PlanAccessKind.subscriptionPro => 'PRO mensal',
+
         PlanAccessKind.free => 'Gratuito',
 
       };
@@ -132,15 +153,27 @@ class SubscriptionState {
 
               : 'Licença PRO neste aparelho',
 
+        PlanAccessKind.subscriptionPro =>
+
+          'PRO mensal ativo até ${_formatSubUntil(proSubscriptionUntil)} · renove se necessário',
+
         PlanAccessKind.trialPro =>
 
           'Trial grátis: faltam $trialDaysRemaining dia${trialDaysRemaining == 1 ? '' : 's'} · depois plano Grátis',
 
         PlanAccessKind.free =>
 
-          'Plano Grátis: até ${PlanLimits.freeMaxDeliveriesPerRoute} entregas/rota (planilha ou manual) · chave PRO',
+          'Plano Grátis: até ${PlanLimits.freeMaxDeliveriesPerRoute} entregas/rota · assine PRO R\$ ${PlanLimits.proMonthlyPriceBrl.toStringAsFixed(0)}/mês',
 
       };
+
+  static String _formatSubUntil(DateTime? until) {
+    if (until == null) return '—';
+    final d = until.day.toString().padLeft(2, '0');
+    final m = until.month.toString().padLeft(2, '0');
+    final y = until.year;
+    return '$d/$m/$y';
+  }
 
 
 
@@ -154,6 +187,10 @@ class SubscriptionState {
 
     bool? pendingRevokedNotice,
 
+    DateTime? proSubscriptionUntil,
+
+    bool clearProSubscriptionUntil = false,
+
   }) {
 
     return SubscriptionState(
@@ -165,6 +202,10 @@ class SubscriptionState {
       buyerName: buyerName ?? this.buyerName,
 
       pendingRevokedNotice: pendingRevokedNotice ?? this.pendingRevokedNotice,
+
+      proSubscriptionUntil: clearProSubscriptionUntil
+          ? null
+          : (proSubscriptionUntil ?? this.proSubscriptionUntil),
 
     );
 
@@ -178,7 +219,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
   SubscriptionNotifier() : super(const SubscriptionState());
 
+  DateTime? _lastPolicySyncAt;
 
+  static const _policySyncMinInterval = Duration(seconds: 40);
 
   Future<void> load() async {
 
@@ -210,6 +253,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
         await _refreshOnlineLicenseStatus();
 
+        await _registerLicensedProInBackground(prefs, check.buyerName);
+
         return;
 
       }
@@ -240,6 +285,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
       );
 
+      await _registerLicensedProInBackground(prefs, null);
+
       return;
 
     }
@@ -248,13 +295,23 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
     state = await _stateWithTrialForFreeUser(prefs, revokedNotice: revokedNotice);
 
+    state = await SubscriptionProUntilPolicy.mergeOnlineSubscription(state, prefs);
+
   }
 
 
 
-  /// Depois de liberar trial no script GitHub — Configurações → sincronizar plano.
+  /// Atualiza trial/PRO pela lista online (GitHub). Automático ao abrir/voltar ao app; manual em Configurações.
 
-  Future<void> reloadPlanFromServer() async {
+  Future<void> reloadPlanFromServer({bool force = false}) async {
+
+    if (!force) {
+      final last = _lastPolicySyncAt;
+      if (last != null && DateTime.now().difference(last) < _policySyncMinInterval) {
+        return;
+      }
+    }
+    _lastPolicySyncAt = DateTime.now();
 
     final prefs = await SharedPreferences.getInstance();
 
@@ -283,6 +340,16 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       prefs,
 
       revokedNotice: revokedNotice,
+
+      bustCache: true,
+
+    );
+
+    state = await SubscriptionProUntilPolicy.mergeOnlineSubscription(
+
+      state,
+
+      prefs,
 
       bustCache: true,
 
@@ -366,7 +433,17 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
     state = state.copyWith(pendingRevokedNotice: false);
 
-
+    await prefs.setBool(_prefLicensedRegisteredOnline, false);
+    Future<void>(() async {
+      final deviceId = await DeviceIdService.hardwareId();
+      final ok = await OnlineLicenseService.registerLicensedProDevice(
+        deviceId,
+        buyerName: check.buyerName,
+      );
+      if (ok) {
+        await prefs.setBool(_prefLicensedRegisteredOnline, true);
+      }
+    });
 
     return (ok: true, error: null);
 
@@ -484,6 +561,24 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
 
 
+  Future<void> _registerLicensedProInBackground(
+    SharedPreferences prefs,
+    String? buyerName,
+  ) async {
+    if (prefs.getBool(_prefLicensedRegisteredOnline) ?? false) return;
+    final deviceId = await DeviceIdService.hardwareId();
+    final ok = await OnlineLicenseService.registerLicensedProDevice(
+      deviceId,
+      buyerName: buyerName,
+    );
+    if (ok) {
+      await prefs.setBool(_prefLicensedRegisteredOnline, true);
+      return;
+    }
+    // Apps Script antigo ou sem rede — tenta de novo na próxima abertura.
+    await prefs.setBool(_prefLicensedRegisteredOnline, false);
+  }
+
   Future<void> _registerTrialInBackground(String deviceId) async {
 
     final ok = await OnlineLicenseService.registerTrialUsedDevice(deviceId);
@@ -548,7 +643,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
     bool revokedNotice = false,
 
-    bool bustCache = false,
+    bool bustCache = true,
 
   }) async {
 

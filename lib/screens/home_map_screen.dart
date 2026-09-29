@@ -10,9 +10,13 @@ import 'package:rota_prime/screens/criar_rota_screen.dart';
 
 import 'package:rota_prime/widgets/add_parada_sheet.dart';
 import 'package:rota_prime/widgets/add_stops_sheet.dart';
+import 'package:rota_prime/app/map_basemap.dart';
 import 'package:rota_prime/providers/app_shell_provider.dart';
+import 'package:rota_prime/providers/map_settings_provider.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
+import 'package:rota_prime/providers/subscription_provider.dart';
 import 'package:rota_prime/navigation/route_shell_navigation.dart';
+import 'package:rota_prime/widgets/map_layers_sheet.dart';
 
 import 'package:rota_prime/widgets/empty_stops_illustration.dart';
 
@@ -21,6 +25,7 @@ import 'package:rota_prime/widgets/route_map.dart';
 import 'package:rota_prime/widgets/driver_route_top_bar.dart';
 import 'package:rota_prime/widgets/circuit_view_toggle.dart';
 import 'package:rota_prime/widgets/spoke_widgets.dart';
+import 'package:rota_prime/widgets/saved_routes_menu_sheet.dart';
 
 
 
@@ -60,14 +65,22 @@ class HomeMapScreen extends ConsumerWidget {
   @override
 
   Widget build(BuildContext context, WidgetRef ref) {
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
+    final basemapSetting = ref.watch(mapSettingsProvider.select((s) => s.basemap));
+    final basemap = MapBasemap.effectiveForPlan(basemapSetting, isPro: isPro);
 
     final stack = Stack(
 
         children: [
 
-          const Positioned.fill(
+          Positioned.fill(
 
-            child: RouteMap(paradas: [], routePoints: []),
+            child: RouteMap(
+              key: ValueKey<String>('home_map_${basemap.name}'),
+              paradas: const [],
+              routePoints: const [],
+              basemap: basemap,
+            ),
 
           ),
 
@@ -104,7 +117,10 @@ class HomeMapScreen extends ConsumerWidget {
 
               children: [
 
-                MapCircleButton(icon: Icons.layers_outlined, onTap: () {}),
+                MapCircleButton(
+                  icon: Icons.layers_outlined,
+                  onTap: () => showMapLayersSheet(context, ref),
+                ),
 
                 const SizedBox(height: 8),
 
@@ -169,11 +185,12 @@ class HomeMapScreen extends ConsumerWidget {
                         ),
 
                         IconButton(
-
-                          onPressed: () => _openCriarRota(context),
-
+                          onPressed: () => showSavedRoutesMenuSheet(
+                            context,
+                            ref,
+                            embeddedInShell: embeddedInShell,
+                          ),
                           icon: const Icon(Icons.more_vert, color: Colors.white70),
-
                         ),
 
                       ],

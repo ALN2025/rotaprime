@@ -56,6 +56,7 @@ String extractDeliveryUnitSegment(String normalizedAddress) {
   capture('an', RegExp(r'\bandar\s*([\w\-/]+)'));
   capture('lt', RegExp(r'\blote\s*([\w\-/]+)'));
   capture('qd', RegExp(r'\bquadra\s*([\w\-/]+)'));
+  capture('cs', RegExp(r'\bcasa\s*([\w\-/]+)'));
 
   if (tags.isEmpty) return '';
   tags.sort();
@@ -192,12 +193,102 @@ String addressTextForParada(Parada p) {
   return stripRecipientNamePrefix(text);
 }
 
-/// Chave estável: logradouro + número + unidade (AP/bloco) + CEP + cidade.
+/// Nome no início do endereço (Shopee) — separa vizinhos no mesmo nº sem AP/casa.
+String extractRecipientToken(Parada p) {
+  var raw = p.destinationAddress.trim();
+  if (raw.isEmpty) raw = p.rawLine.trim();
+  final parts = raw.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+  if (parts.length < 2) return '';
+  final first = normalizeAddressToken(parts.first);
+  if (first.isEmpty || first.length > 40) return '';
+  if (RegExp(r'\d{3,}').hasMatch(first)) return '';
+  const streetHints = ['rua ', 'r ', 'avenida ', 'av ', 'estrada ', 'residencial ', 'cond '];
+  if (streetHints.any(first.startsWith)) return '';
+  return first;
+}
+
+/// Prédio / portaria: logradouro + número (+ CEP/cidade). Ignora AP, bloco e nome.
+String buildAddressSiteKey(Parada p) {
+  final text = normalizeAddressToken(addressTextForParada(p));
+  final street = extractStreetLine(text);
+  final number = extractPrimaryStreetNumber(text);
+  final zip = _digitsOnly(p.zipcode);
+  final city = normalizeAddressToken(p.city);
+  final bairro = normalizeAddressToken(p.bairro);
+
+  if (street != null && number != null) {
+    final parts = <String>[canonicalStreetLine(street), 'n$number'];
+    if (zip.length >= 8) parts.add('cep$zip');
+    if (city.isNotEmpty) {
+      parts.add(city);
+    } else if (bairro.isNotEmpty) {
+      parts.add(bairro);
+    }
+    return parts.join('|');
+  }
+
+  if (text.isNotEmpty) {
+    final compact = _addressTextWithoutUnits(text);
+    if (zip.length >= 8) return '$compact|cep$zip';
+    if (city.isNotEmpty) return '$compact|$city';
+    return compact;
+  }
+  return '';
+}
+
+String _addressTextWithoutUnits(String normalized) {
+  var s = normalized;
+  const unitPatterns = [
+    r'\bap\s*[\w\-/]+',
+    r'\bbl\s*[\w\-/]+',
+    r'\bsala\s*[\w\-/]+',
+    r'\bcj\s*[\w\-/]+',
+    r'\btorre\s*[\w\-/]+',
+    r'\bandar\s*[\w\-/]+',
+    r'\blote\s*[\w\-/]+',
+    r'\bquadra\s*[\w\-/]+',
+    r'\bcasa\s*[\w\-/]+',
+    r'\bapt[o\.]?\s*[\w\-/]+',
+    r'\bapartamento\s*[\w\-/]+',
+    r'\bbloco\s*[\w\-/]+',
+    r'\bconjunto\s*[\w\-/]+',
+  ];
+  for (final pat in unitPatterns) {
+    s = s.replaceAll(RegExp(pat), ' ');
+  }
+  s = s.replaceAll(RegExp(r'\s+'), ' ').replaceAll(RegExp(r',\s*,+'), ',').trim();
+  return s.split(',').take(2).join(',').trim();
+}
+
+/// Mesmo prédio / mesmo número na rua (AP, bloco ou destinatário podem diferir).
+bool sameBuildingSite(Parada a, Parada b) {
+  final sa = buildAddressSiteKey(a);
+  final sb = buildAddressSiteKey(b);
+  if (sa.isNotEmpty && sb.isNotEmpty && sa == sb) return true;
+
+  if (coordsWithinMeters(a, b, 45)) {
+    final ta = normalizeAddressToken(addressTextForParada(a));
+    final tb = normalizeAddressToken(addressTextForParada(b));
+    final na = extractPrimaryStreetNumber(ta);
+    final nb = extractPrimaryStreetNumber(tb);
+    if (na != null && na == nb) {
+      final stra = extractStreetLine(ta);
+      final strb = extractStreetLine(tb);
+      if (stra != null && strb != null) {
+        return canonicalStreetLine(stra) == canonicalStreetLine(strb);
+      }
+    }
+  }
+  return false;
+}
+
+/// Chave estável: logradouro + número + unidade (AP/bloco/casa) + CEP + cidade.
 String buildAddressCoreKey(Parada p) {
   final text = normalizeAddressToken(addressTextForParada(p));
   final street = extractStreetLine(text);
   final number = extractPrimaryStreetNumber(text);
   final unit = extractDeliveryUnitSegment(text);
+  final recipient = unit.isEmpty ? extractRecipientToken(p) : '';
   final zip = _digitsOnly(p.zipcode);
   final city = normalizeAddressToken(p.city);
   final bairro = normalizeAddressToken(p.bairro);
@@ -205,6 +296,7 @@ String buildAddressCoreKey(Parada p) {
   if (street != null && number != null) {
     final parts = <String>[canonicalStreetLine(street), 'n$number'];
     if (unit.isNotEmpty) parts.add(unit);
+    if (recipient.isNotEmpty) parts.add('dst:$recipient');
     if (zip.length >= 8) parts.add('cep$zip');
     if (city.isNotEmpty) {
       parts.add(city);

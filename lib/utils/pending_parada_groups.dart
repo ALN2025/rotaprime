@@ -11,10 +11,7 @@ List<Parada> pendingParadasGroupedByAddress(List<Parada> pendingInRouteOrder) {
 }
 
 List<Parada> paradasAtSameAddress(List<Parada> all, Parada anchor) {
-  final key = deliveryAddressKey(anchor);
-  return all
-      .where((p) => deliveryAddressKey(p) == key || sameDeliveryLocation(p, anchor))
-      .toList();
+  return paradasAtSameBuildingSite(all, anchor);
 }
 
 List<Parada> pendingAtSameAddress(List<Parada> all, Parada anchor) {
