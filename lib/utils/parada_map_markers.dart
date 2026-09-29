@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:rota_prime/app/theme.dart';
 import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/utils/delivery_address_core.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
@@ -111,6 +113,24 @@ Map<int, LatLng> buildMapMarkerDisplayPoints(List<Parada> all) {
 }
 
 enum MapPinDeliveryState { pending, delivered, failed }
+
+/// Cor do pin alinhada à legenda do mapa ([kDeliveryMapLegendEntries]).
+Color mapPinFillColor(
+  MapPinDeliveryState state, {
+  required bool selected,
+  bool highlighted = false,
+}) {
+  switch (state) {
+    case MapPinDeliveryState.delivered:
+      return AppColors.successGreen;
+    case MapPinDeliveryState.failed:
+      return AppColors.stopFailed;
+    case MapPinDeliveryState.pending:
+      return (selected || highlighted)
+          ? AppColors.orange
+          : AppColors.stopPending;
+  }
+}
 
 MapPinDeliveryState pinStateForAddress(List<Parada> all, Parada anchor) {
   final rows = _rowsInMapPinGroup(all, anchor);

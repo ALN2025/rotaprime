@@ -48,6 +48,9 @@ import 'package:rota_prime/widgets/circuit_view_toggle.dart';
 import 'package:rota_prime/app/app_navigator.dart';
 import 'package:rota_prime/widgets/add_parada_sheet.dart';
 import 'package:rota_prime/widgets/route_finalize_flow.dart';
+import 'package:rota_prime/widgets/qr_scan_address_sheet.dart';
+import 'package:rota_prime/widgets/manual_parada_dialog.dart';
+import 'package:rota_prime/utils/qr_parada_fields.dart';
 
 class RotaAtivaScreen extends ConsumerStatefulWidget {
   const RotaAtivaScreen({super.key, this.embeddedInShell = false});
@@ -128,12 +131,12 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       _followHeading = false;
       _drivingMode = false;
       _optimized = rota?.otimizada == true;
+      _mapPrimed = true;
       if (stopCount >= MapPerformance.listFirstStopCount) {
         _view = CircuitDeliveryView.list;
         _mapEverShown = false;
       } else {
         _mapEverShown = true;
-        _mapPrimed = true;
       }
     }
     _routeClockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -156,6 +159,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
           unawaited(ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly(force: false));
         }
         unawaited(ref.read(rotaProvider.notifier).stripRouteTraceUnlessProOptimized());
+        unawaited(_bootstrapPlanningRouteView());
         return;
       }
       await _coldStartMapSession();
@@ -223,36 +227,50 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
   }
 
   Future<void> _coldStartMapSession() async {
-    final rota = ref.read(rotaProvider).rota;
-    final isPro = ref.read(subscriptionProvider).isPro;
-    if (isPro && rota?.otimizada == true) {
-      if (mounted) setState(() => _optimized = true);
-    } else if (!isPro && ref.read(rotaProvider).paradas.isNotEmpty) {
-      await ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly(force: false);
-      if (mounted) setState(() => _optimized = true);
+    if (mounted) {
+      setState(() {
+        _mapPrimed = true;
+        _mapEverShown = true;
+      });
     }
-    await DeliveryCockpitService.instance.start();
-    if (mounted) setState(() {});
-    await ref.read(rotaProvider.notifier).stripRouteTraceUnlessProOptimized();
-    await _primeMapView();
-    if (!mounted) return;
-    setState(() => _mapPrimed = true);
-    await ref.read(rotaProvider.notifier).refreshDriverLocation();
-    final st0 = ref.read(rotaProvider);
-    _liveDriverPosition = st0.driverPosition;
-    _liveDriverHeading = st0.driverHeading;
-    final nav = ref.read(rotaProvider.notifier);
-    await nav.syncActiveNavigationTarget();
-    await nav.refreshNavigationLegForActiveTarget(force: true);
-    final active = RotaNotifier.activeNavigationParadaFrom(
-      ref.read(rotaProvider),
-      isPro: ref.read(subscriptionProvider).isPro,
-    );
-    if (active != null && mounted) {
-      setState(() => _selectedParadaId = active.id);
+    try {
+      final rota = ref.read(rotaProvider).rota;
+      final isPro = ref.read(subscriptionProvider).isPro;
+      if (isPro && rota?.otimizada == true) {
+        if (mounted) setState(() => _optimized = true);
+      } else if (!isPro && ref.read(rotaProvider).paradas.isNotEmpty) {
+        await ref.read(rotaProvider.notifier).applySpreadsheetOrderOnly(force: false);
+        if (mounted) setState(() => _optimized = true);
+      }
+      await DeliveryCockpitService.instance.start();
+      await ref.read(rotaProvider.notifier).stripRouteTraceUnlessProOptimized();
+      await _primeMapView().timeout(const Duration(seconds: 8), onTimeout: () {});
+      await ref.read(rotaProvider.notifier).refreshDriverLocation();
+      final st0 = ref.read(rotaProvider);
+      if (mounted) {
+        _liveDriverPosition = st0.driverPosition;
+        _liveDriverHeading = st0.driverHeading;
+      }
+      final nav = ref.read(rotaProvider.notifier);
+      await nav.syncActiveNavigationTarget().timeout(const Duration(seconds: 6), onTimeout: () {});
+      unawaited(nav.refreshNavigationLegForActiveTarget(force: true));
+      final active = RotaNotifier.activeNavigationParadaFrom(
+        ref.read(rotaProvider),
+        isPro: ref.read(subscriptionProvider).isPro,
+      );
+      if (active != null && mounted) {
+        setState(() => _selectedParadaId = active.id);
+      }
+      _mapSessionRotaId = ref.read(rotaProvider).rotaId;
+      _startGpsFollow();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _mapPrimed = true;
+          _mapEverShown = true;
+        });
+      }
     }
-    _mapSessionRotaId = ref.read(rotaProvider).rotaId;
-    _startGpsFollow();
   }
 
   Future<void> _softResumeFromBackground() async {
@@ -1028,6 +1046,16 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
       );
   }
 
+  Future<void> _editParadaDetails(Parada p) async {
+    if (QrParadaFields.isQrParada(p) || ParadaLabels.needsAddressFromLabel(p)) {
+      await showEditQrParadaSheet(context, ref, p.id);
+    } else if (ref.read(rotaProvider).canEditParada(p)) {
+      await showEditParadaDialog(context, ref, p);
+    }
+    if (!mounted) return;
+    await ref.read(rotaProvider.notifier).focusParadaAfterQrScan(p.id);
+  }
+
   Future<void> _openParada(
     Parada p, {
     bool focusMapOnPin = true,
@@ -1180,6 +1208,7 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     if (status == RotaStatus.rascunho) {
       final n = ref.read(rotaProvider).paradas.length;
       setState(() {
+        _mapPrimed = true;
         _followGps = false;
         _followHeading = false;
         _drivingMode = false;
@@ -1273,9 +1302,10 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
     final heavyMap = paradas.length > MapPerformance.heavyStopCount;
     final multiStopsOnMap = paradas.length > 1;
     final pinRouteFocus = _manualTargetLock && _selectedParadaId != null;
-    // Tarja laranja: só trecho até o pin alvo (mais próximo ou escolhido), não a rota inteira.
-    final showNavLegPolyline =
-        showFullRouteTrace && (routeActive || pinRouteFocus || current != null);
+    // Tarja laranja: trecho GPS → pin (não exige rota otimizada inteira).
+    final showNavLegPolyline = isPro &&
+        navigationLegPoints.length >= 2 &&
+        (routeActive || pinRouteFocus || current != null || navigationTargetParadaId != null);
 
     final listPane = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1624,6 +1654,9 @@ class _RotaAtivaScreenState extends ConsumerState<RotaAtivaScreen>
               stop,
               next: peekNext,
             ),
+            onEditParada: ref.read(rotaProvider).canEditParada(stop)
+                ? () => _editParadaDetails(stop)
+                : null,
             onPrevious: !multiStopsOnMap || previousStop == null
                 ? null
                 : () => _skipToNextFocus(previousStop),

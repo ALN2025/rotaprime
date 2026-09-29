@@ -3,6 +3,7 @@ import 'package:rota_prime/app/theme.dart';
 import 'package:rota_prime/models/parada.dart';
 import 'package:rota_prime/utils/parada_labels.dart';
 import 'package:rota_prime/utils/parada_packages.dart';
+import 'package:rota_prime/utils/qr_parada_fields.dart';
 import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
 import 'package:rota_prime/widgets/carrier_pin_badge.dart';
 import 'package:rota_prime/widgets/circuit_stop_ui.dart';
@@ -20,11 +21,13 @@ class StopRouteAddressPeek {
     this.packageOrders = const [],
     this.currentParada,
     this.multiPackageCaption,
+    this.currentRecipientName,
   });
 
   final String currentPinLabel;
   final String currentAddress;
   final String? currentMeta;
+  final String? currentRecipientName;
   final String? nextPinLabel;
   final String? nextAddress;
   final String? nextMeta;
@@ -48,18 +51,15 @@ class StopRouteAddressPeek {
     Parada? next,
   }) {
     final nextLabel = next != null ? ParadaLabels.mapPinLabel(all, next) : null;
+    final qr = QrParadaFields.parse(current);
+    final recipient = qr.recipientName.trim();
     return StopRouteAddressPeek(
       currentPinLabel: ParadaLabels.mapPinDisplayLabel(all, current),
-      currentAddress: current.destinationAddress.trim().isNotEmpty
-          ? current.destinationAddress.trim()
-          : current.rawLine.trim(),
+      currentAddress: ParadaLabels.listAddressTitle(current),
+      currentRecipientName: recipient.isNotEmpty ? recipient : null,
       currentMeta: _metaLine(current),
       nextPinLabel: nextLabel,
-      nextAddress: next != null
-          ? (next.destinationAddress.trim().isNotEmpty
-              ? next.destinationAddress.trim()
-              : next.rawLine.trim())
-          : null,
+      nextAddress: next != null ? ParadaLabels.listAddressTitle(next) : null,
       nextMeta: next != null ? _metaLine(next) : null,
       packageOrders: () {
         final pending = ParadaLabels.pendingPackageOrderLabelsAtStop(all, current);
@@ -105,6 +105,7 @@ class StopActionPanel extends StatelessWidget {
     this.onPrevious,
     this.onNext,
     this.onUndoLast,
+    this.onEditParada,
   });
 
   /// Se omitido, use [routePeek] no mapa (economia de bateria).
@@ -115,6 +116,7 @@ class StopActionPanel extends StatelessWidget {
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final VoidCallback? onUndoLast;
+  final VoidCallback? onEditParada;
 
   static const _btnH = 40.0;
 
@@ -168,7 +170,10 @@ class StopActionPanel extends StatelessWidget {
             ),
           ),
         if (routePeek != null)
-          StopAddressPeekCard(peek: routePeek!)
+          StopAddressPeekCard(
+            peek: routePeek!,
+            onEdit: onEditParada,
+          )
         else if (onNavigate != null)
           SizedBox(
             width: double.infinity,
@@ -272,9 +277,10 @@ class StopActionPanel extends StatelessWidget {
 }
 
 class StopAddressPeekCard extends StatelessWidget {
-  const StopAddressPeekCard({required this.peek, super.key});
+  const StopAddressPeekCard({required this.peek, this.onEdit, super.key});
 
   final StopRouteAddressPeek peek;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -307,15 +313,45 @@ class StopAddressPeekCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              peek.currentAddress,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                height: 1.28,
+                            child: InkWell(
+                              onTap: onEdit,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (peek.currentRecipientName != null) ...[
+                                      Text(
+                                        peek.currentRecipientName!,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
+                                    Text(
+                                      peek.currentAddress,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: peek.currentParada != null &&
+                                                ParadaLabels.needsAddressFromLabel(
+                                                  peek.currentParada!,
+                                                )
+                                            ? Colors.amber.shade200
+                                            : Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.28,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -325,6 +361,23 @@ class StopAddressPeekCard extends StatelessWidget {
                           ],
                         ],
                       ),
+                      if (onEdit != null) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: onEdit,
+                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            label: const Text('Editar nome e endereço'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.orange,
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (peek.currentMeta != null) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -346,6 +399,21 @@ class StopAddressPeekCard extends StatelessWidget {
                           (peek.currentParada?.prazoEntrega.trim().isNotEmpty ??
                               false)) ...[
                         const SizedBox(height: 8),
+                        if (peek.currentParada != null &&
+                            peek.packageOrders.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              RomaneioCarrierBranding.deliveryCodeHint(
+                                RomaneioCarrierBranding.carrierOf(peek.currentParada!),
+                              ),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         Wrap(
                           spacing: 8,
                           runSpacing: 6,

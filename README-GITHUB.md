@@ -25,7 +25,7 @@
 | 💾 **Dados** | Rotas salvas **no celular**; retoma rota ativa ao reabrir o app |
 | 🔒 **Privacidade** | Sem conta obrigatória; licença PRO amarrada ao **ID do aparelho** |
 
-**Versão atual:** `1.2.8` · Android (APK: ARM 32 + 64 bits)
+**Versão atual:** `1.2.9` · Android (APK: ARM 32 + 64 bits)
 
 ---
 
@@ -41,7 +41,7 @@
 ### ⬇️ Link direto de download
 
 - **Última versão (sempre atual):** https://github.com/ALN2025/rotaprime/releases/latest  
-- **APK v1.2.8 (link fixo):** https://github.com/ALN2025/rotaprime/releases/download/v1.2.8/ROTA_PRIME.apk
+- **APK v1.2.9 (link fixo):** https://github.com/ALN2025/rotaprime/releases/download/v1.2.9/ROTA_PRIME.apk
 
 ---
 

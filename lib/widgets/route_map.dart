@@ -224,6 +224,8 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
                     ? null
                     : () => widget.onParadaTap!(p),
                 child: _ViewportStopPin(
+                  allParadas: widget.paradas,
+                  parada: p,
                   label: c.displayLabel,
                   selected: _isSelected(p),
                   merged: c.isMergedCluster,
@@ -683,12 +685,16 @@ class _RouteMapState extends State<RouteMap> with SingleTickerProviderStateMixin
 /// Pin leve (viewport / 100+ paradas) — 32×32, sem sombra pesada.
 class _ViewportStopPin extends StatelessWidget {
   const _ViewportStopPin({
+    required this.allParadas,
+    required this.parada,
     required this.label,
     required this.selected,
     required this.merged,
     this.pinTextStyle,
   });
 
+  final List<Parada> allParadas;
+  final Parada parada;
   final String label;
   final bool selected;
   final bool merged;
@@ -696,9 +702,12 @@ class _ViewportStopPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = pinStateForAddress(allParadas, parada);
     final fill = merged
         ? AppColors.orange
-        : (selected ? AppColors.orange : const Color(0xFF6B6B73));
+        : mapPinFillColor(state, selected: selected);
+    final showNumber =
+        merged || state == MapPinDeliveryState.pending;
     return Container(
       width: 32,
       height: 32,
@@ -707,24 +716,30 @@ class _ViewportStopPin extends StatelessWidget {
         color: fill,
         shape: BoxShape.circle,
         border: Border.all(
-          color: selected ? Colors.white : Colors.white.withValues(alpha: 0.85),
+          color: selected ? AppColors.orange : Colors.white.withValues(alpha: 0.85),
           width: selected ? 2.5 : 1.5,
         ),
       ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        maxLines: 1,
-        overflow: TextOverflow.fade,
-        softWrap: false,
-        style: pinTextStyle ??
-            TextStyle(
+      child: showNumber
+          ? Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              style: pinTextStyle ??
+                  TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: merged ? 11 : 12,
+                    height: 1,
+                  ),
+            )
+          : Icon(
+              state == MapPinDeliveryState.delivered ? Icons.check : Icons.close,
               color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: merged ? 11 : 12,
-              height: 1,
+              size: 16,
             ),
-      ),
     );
   }
 }
@@ -754,16 +769,8 @@ class _StopPin extends StatelessWidget {
 
   MapPinDeliveryState get _state => pinStateForAddress(allParadas, parada);
 
-  Color get _fillColor {
-    switch (_state) {
-      case MapPinDeliveryState.delivered:
-        return AppColors.successGreen;
-      case MapPinDeliveryState.failed:
-        return AppColors.stopFailed;
-      case MapPinDeliveryState.pending:
-        return (selected || highlighted) ? AppColors.orange : AppColors.stopPending;
-    }
-  }
+  Color get _fillColor =>
+      mapPinFillColor(_state, selected: selected, highlighted: highlighted);
 
   IconData? get _icon {
     switch (_state) {
@@ -811,7 +818,7 @@ class _StopPin extends StatelessWidget {
 
   Widget _buildPinBody() {
     final delivered = _state == MapPinDeliveryState.delivered;
-    final showOrderNumber = _state == MapPinDeliveryState.pending || selected;
+    final showOrderNumber = _state == MapPinDeliveryState.pending;
     final w = (compact
             ? (selected ? 32.0 : (highlighted ? 28.0 : 22.0))
             : (selected ? 40.0 : (highlighted ? 34.0 : 28.0)))

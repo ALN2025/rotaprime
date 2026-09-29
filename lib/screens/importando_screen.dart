@@ -31,6 +31,8 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
 
   Future<void> _runImport() async {
     final notifier = ref.read(rotaProvider.notifier);
+    ref.read(rotaProvider.notifier).clearImportStatusMessage();
+    ScaffoldMessenger.of(context).clearSnackBars();
 
     final pdf =
         (ref.read(rotaProvider).importFileName ?? '').toLowerCase().endsWith('.pdf');
@@ -47,6 +49,7 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
         ? 'Lendo PDF e localizando endereços no mapa (pode levar 1–2 min)…'
         : 'Lendo planilha e montando a rota…');
     try {
+      setState(() => _status = 'Montando paradas e endereços…');
       await notifier.importFromMapping();
       Future<void>.microtask(() => ref.invalidate(contaRotasProvider));
       if (!mounted) return;
@@ -101,8 +104,6 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final live = ref.watch(rotaProvider.select((s) => s.statusMessage));
-
     return Scaffold(
       backgroundColor: AppColors.orange,
       body: SafeArea(
@@ -127,7 +128,7 @@ class _ImportandoScreenState extends ConsumerState<ImportandoScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                live.isNotEmpty ? live : _status,
+                _status,
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.92), height: 1.4),
               ),
               if (_error != null) ...[

@@ -4,13 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:rota_prime/app/theme.dart';
+import 'package:rota_prime/providers/app_shell_provider.dart';
 import 'package:rota_prime/providers/rota_provider.dart';
 import 'package:rota_prime/navigation/route_shell_navigation.dart';
 import 'package:rota_prime/utils/parada_scan_match.dart';
+import 'package:rota_prime/utils/parada_labels.dart';
+import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
+import 'package:rota_prime/utils/scan_payload_parse.dart';
 import 'package:rota_prime/utils/spx_regex.dart';
+import 'package:rota_prime/utils/qr_parada_fields.dart';
 import 'package:rota_prime/widgets/package_scanner_overlay.dart';
+import 'package:rota_prime/widgets/qr_scan_address_sheet.dart';
 
-/// Leitor QR/código de barras — [MobileScanner] padrão (câmera gerenciada pelo plugin).
+/// Leitor QR/código de barras — adiciona pacote; pede endereço da etiqueta se o QR só tiver o BR.
 class QrScannerScreen extends ConsumerStatefulWidget {
   const QrScannerScreen({super.key, this.returnAddedParada = false});
 
@@ -22,7 +28,7 @@ class QrScannerScreen extends ConsumerStatefulWidget {
 
 class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   int _scannerKey = 0;
-  bool _dialogOpen = false;
+  bool _adding = false;
   String? _lastRawCode;
   DateTime? _lastDetectAt;
   String? _lastCameraError;
@@ -56,36 +62,21 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
 
   Future<void> _manualPackageCode() async {
     final codeCtrl = TextEditingController();
-    final addrCtrl = TextEditingController();
     String? code;
-    String? addr;
     await showDialog<void>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppColors.sheet,
           title: const Text('Código do pacote', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: codeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'QR / código de barras',
-                  labelStyle: TextStyle(color: Colors.white54),
-                ),
-                style: const TextStyle(color: Colors.white),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: addrCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Endereço',
-                  labelStyle: TextStyle(color: Colors.white54),
-                ),
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
+          content: TextField(
+            controller: codeCtrl,
+            decoration: const InputDecoration(
+              labelText: 'QR / código de barras',
+              labelStyle: TextStyle(color: Colors.white54),
+            ),
+            style: const TextStyle(color: Colors.white),
+            autofocus: true,
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
@@ -93,7 +84,6 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.orange),
               onPressed: () {
                 code = codeCtrl.text.trim();
-                addr = addrCtrl.text.trim();
                 Navigator.pop(ctx);
               },
               child: const Text('Adicionar'),
@@ -103,23 +93,68 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
       },
     );
     codeCtrl.dispose();
-    addrCtrl.dispose();
     if (!mounted) return;
     final c = code;
-    final a = addr;
-    if (c == null || a == null || c.length < 4 || a.isEmpty) return;
+    if (c == null || c.length < 4) return;
+    await _addCodeToRoute(c, c);
+  }
 
-    final parada = await ref.read(rotaProvider.notifier).addParadaFromQr(c, a);
-    if (!mounted) return;
-    if (widget.returnAddedParada) {
-      Navigator.of(context).pop(parada);
-      return;
+  Future<void> _addCodeToRoute(String code, String rawScan) async {
+    if (_adding) return;
+    _adding = true;
+    try {
+      final notifier = ref.read(rotaProvider.notifier);
+      final resolved = await notifier.resolveAddressForScanCode(code, rawScan);
+      final geocode = resolved.geocodeQuery != null;
+      final nameHint = extractNameFromScanRaw(rawScan) ?? '';
+      final parada = await notifier.addParadaFromQr(
+        code,
+        resolved.displayAddress,
+        geocodeAddress: geocode,
+        recipientName: nameHint,
+      );
+      if (!mounted || parada == null) return;
+      await HapticFeedback.lightImpact();
+      if (widget.returnAddedParada) {
+        if (!mounted) return;
+        Navigator.of(context).pop(parada);
+        return;
+      }
+      if (ParadaLabels.needsAddressFromLabel(parada) ||
+          ParadaLabels.needsShopeeBagOrder(parada)) {
+        final qf = QrParadaFields.parse(parada);
+        await showQrScanAddressSheet(
+          context,
+          ref,
+          paradaId: parada.id,
+          trackingCode: code,
+          initialName: qf.recipientName,
+          initialAddress: qf.address,
+        );
+      }
+      if (!mounted) return;
+      navigateToRouteMap(context, ref);
+      ref.read(mapFocusParadaIdProvider.notifier).state = parada.id;
+      if (!mounted) return;
+      final fresh = ref.read(rotaProvider.notifier).paradaById(parada.id) ?? parada;
+      final needsAddr = ParadaLabels.needsAddressFromLabel(fresh);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            needsAddr
+                ? 'Pacote $code — cole o endereço da etiqueta para ver a tarja laranja'
+                : 'Pacote $code · parada ${parada.ordemExibicao} no mapa',
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      _adding = false;
     }
-    navigateToRouteMap(context, ref);
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_dialogOpen) return;
+    if (_adding) return;
 
     final barcode = capture.barcodes.firstOrNull;
     final raw = barcode?.rawValue?.trim();
@@ -157,84 +192,22 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
         Navigator.of(context).pop(existing);
         return;
       }
+      final chip = ParadaLabels.packageOrderDisplay(existing);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pacote $code · parada ${existing.ordemExibicao}')),
+        SnackBar(
+          content: Text(
+            'Pacote $chip · pin ${existing.ordemExibicao} · '
+            '${RomaneioCarrierBranding.displayName(RomaneioCarrierBranding.carrierOf(existing))}',
+          ),
+        ),
       );
       navigateToRouteMap(context, ref);
       return;
     }
 
-    _dialogOpen = true;
     await HapticFeedback.mediumImpact();
     SystemSound.play(SystemSoundType.click);
-
-    final address = await ref.read(rotaProvider.notifier).findAddressForSpx(code);
-    if (!mounted) return;
-
-    final addressCtrl = TextEditingController(text: address ?? '');
-
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: const Color(0xFF1A1A1A),
-        builder: (ctx) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Código: $code',
-                  style: const TextStyle(
-                    color: AppColors.orange,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: addressCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Endereço',
-                    labelStyle: TextStyle(color: Colors.white70),
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () async {
-                    final addr = addressCtrl.text.trim();
-                    if (addr.isEmpty) return;
-                    final parada =
-                        await ref.read(rotaProvider.notifier).addParadaFromQr(code, addr);
-                    if (!ctx.mounted) return;
-                    Navigator.of(ctx).pop();
-                    if (!mounted) return;
-                    if (widget.returnAddedParada) {
-                      Navigator.of(context).pop(parada);
-                      return;
-                    }
-                    navigateToRouteMap(context, ref);
-                  },
-                  style: primaryOrangeButtonStyle(),
-                  child: const Text('Adicionar à rota'),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    } finally {
-      _dialogOpen = false;
-      addressCtrl.dispose();
-    }
+    await _addCodeToRoute(code, raw);
   }
 
   @override
@@ -345,7 +318,7 @@ class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
               right: 0,
               bottom: 48,
               child: Text(
-                'Aponte para o QR ou código de barras do pacote',
+                'Aponte para o QR ou código de barras — adiciona direto na rota',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),

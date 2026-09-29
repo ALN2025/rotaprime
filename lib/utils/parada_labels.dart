@@ -5,6 +5,8 @@ import 'package:rota_prime/providers/map_settings_provider.dart';
 import 'package:rota_prime/utils/delivery_address_key.dart';
 import 'package:rota_prime/utils/parada_packages.dart';
 import 'package:rota_prime/utils/romaneio_package_order.dart';
+import 'package:rota_prime/utils/romaneio_carrier_branding.dart';
+import 'package:rota_prime/utils/scan_payload_parse.dart';
 
 /// Rótulos estilo Circuit: ordem da rota (1/90) ≠ parada logística (Stop) ≠ seq. pacote.
 
@@ -29,6 +31,49 @@ class ParadaLabels {
       isShopeePlusOrderLabel(p.packageOrderLabel);
 
 
+
+  /// Título na lista — não usa só o código BR como “endereço”.
+  static String listAddressTitle(Parada p, {String? override}) {
+    final o = override?.trim();
+    if (o != null && o.isNotEmpty && !isTrackingOnlyText(o)) return o;
+    final dest = p.destinationAddress.trim();
+    if (dest.isNotEmpty && !isTrackingOnlyText(dest)) return dest;
+    final raw = p.rawLine.trim();
+    if (raw.isNotEmpty && !isTrackingOnlyText(raw)) return raw;
+    final loc = [p.bairro, p.city].where((s) => s.trim().isNotEmpty).join(' · ');
+    if (loc.isNotEmpty) return loc;
+    return 'Informe nome e endereço da etiqueta';
+  }
+
+  /// QR só com BR — falta endereço da etiqueta.
+  static bool needsShopeeBagOrder(Parada p) {
+    if (!usesShopeeBagOrderOnChip(p)) return false;
+    if (p.packageOrderLabel.trim().isNotEmpty) return false;
+    return p.sequence <= 0;
+  }
+
+  static bool needsAddressFromLabel(Parada p) {
+    final dest = p.destinationAddress.trim();
+    if (dest.isEmpty) return true;
+    if (isTrackingOnlyText(dest)) return true;
+    if (dest == p.spxTn.trim() && p.spxTn.trim().isNotEmpty) return true;
+    return false;
+  }
+
+  /// Linha do código (BR / ID) abaixo do endereço.
+  static String? listTrackingLine(Parada p) {
+    final spx = p.spxTn.trim();
+    if (spx.isEmpty) return null;
+    final title = listAddressTitle(p);
+    if (title.contains(spx)) return null;
+    return spx;
+  }
+
+  /// Pin no mapa: ordem na rota (1…N); QR/extra usa o mesmo (não `++` se tem BR).
+  static String qrAddedPinLabel(List<Parada> all, Parada p) {
+    if (p.ordemExibicao > 0) return '${p.ordemExibicao}';
+    return mapPinLabel(all, p);
+  }
 
   /// Manual/QR no app — sem ordem, sem `+N` Shopee, sem tracking.
   static bool isLateAddedPackage(Parada p) {
@@ -62,8 +107,18 @@ class ParadaLabels {
     if (isLateAddedPackage(p)) return latePackageMarker;
     final plusLabel = p.packageOrderLabel.trim();
     if (plusLabel.isNotEmpty) return plusLabel;
-    if (usesShopeeBagOrderOnChip(p) && p.sequence > 0) {
-      return '${p.sequence}';
+    if (usesShopeeBagOrderOnChip(p)) {
+      if (p.sequence > 0) return '${p.sequence}';
+      final tn = p.spxTn.trim();
+      if (tn.isNotEmpty && !isTrackingOnlyText(tn)) return tn;
+      return '—';
+    }
+    final carrier = RomaneioCarrierBranding.carrierOf(p);
+    if (carrier == RomaneioCarrier.magalog ||
+        carrier == RomaneioCarrier.loggi ||
+        carrier == RomaneioCarrier.rjRelatorioEntregas) {
+      final tn = p.spxTn.trim();
+      if (tn.isNotEmpty) return tn;
     }
     final tn = p.spxTn.trim();
     if (tn.isNotEmpty) return tn;
@@ -178,6 +233,9 @@ class ParadaLabels {
   /// Vários pacotes no mesmo endereço: quantidade no pin ([mapPinDisplayLabel]).
   static String mapPinLabel(List<Parada> all, Parada p) {
     if (isLateAddedPackage(p)) return latePackageMarker;
+    if (p.spxTn.trim().isNotEmpty && p.ordemExibicao > 0) {
+      return '${p.ordemExibicao}';
+    }
     if (p.ordemExibicao > 0) return '${p.ordemExibicao}';
     final idx = all.indexWhere((x) => x.id == p.id && p.id > 0);
     if (idx >= 0) return '${idx + 1}';

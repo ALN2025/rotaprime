@@ -128,7 +128,6 @@ Future<void> _pickSpreadsheetImportCore(WidgetRef ref, {required bool merge}) as
     }
 
     final picked = result.files.first;
-    _snack('Lendo ${picked.name}…');
 
     var bytes = await readPlatformFileBytes(picked);
     if (bytes == null || bytes.isEmpty) {

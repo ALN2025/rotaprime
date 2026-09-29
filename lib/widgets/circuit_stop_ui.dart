@@ -177,12 +177,12 @@ class CircuitStopMetaRow extends StatelessWidget {
       line1 = '$line1, $timeLabel';
     }
 
-    final pin = ParadaLabels.mapPinLabel(allParadas, parada);
-    final address = displayAddress?.trim().isNotEmpty == true
-        ? displayAddress!.trim()
-        : (parada.destinationAddress.trim().isNotEmpty
-            ? parada.destinationAddress.trim()
-            : parada.rawLine.trim());
+    final pin = ParadaLabels.qrAddedPinLabel(allParadas, parada);
+    final address = ParadaLabels.listAddressTitle(
+      parada,
+      override: displayAddress,
+    );
+    final trackingLine = ParadaLabels.listTrackingLine(parada);
     final locationParts = <String>[
       if (_show(DeliveryFieldVisibility.bairro) && parada.bairro.isNotEmpty) parada.bairro,
       if (_show(DeliveryFieldVisibility.city) && parada.city.isNotEmpty) parada.city,
@@ -236,6 +236,17 @@ class CircuitStopMetaRow extends StatelessWidget {
                               StopDeliveryStatusChip(parada: parada),
                             ],
                           ),
+                          if (trackingLine != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              trackingLine,
+                              style: TextStyle(
+                                color: AppColors.orange.withValues(alpha: 0.95),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                           if (locationLine.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(

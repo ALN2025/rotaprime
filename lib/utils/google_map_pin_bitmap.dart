@@ -3,17 +3,20 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:rota_prime/app/theme.dart';
+import 'package:rota_prime/utils/parada_map_markers.dart';
 
 final _pinCache = <String, BitmapDescriptor>{};
 
-const _cacheVersion = 'rp2';
+const _cacheVersion = 'rp3';
 
 Future<BitmapDescriptor> googleMapPinIcon(
   String label, {
   bool selected = false,
   bool compact = false,
+  MapPinDeliveryState deliveryState = MapPinDeliveryState.pending,
 }) async {
-  final key = '$_cacheVersion|pin|$label|$selected|$compact';
+  final key =
+      '$_cacheVersion|pin|$label|$selected|$compact|${deliveryState.name}';
   final cached = _pinCache[key];
   if (cached != null) return cached;
 
@@ -27,6 +30,7 @@ Future<BitmapDescriptor> googleMapPinIcon(
     label: label.length > 4 ? label.substring(0, 4) : label,
     selected: selected,
     compact: compact,
+    deliveryState: deliveryState,
   );
 
   final img = await recorder.endRecording().toImage(w.ceil(), h.ceil());
@@ -58,8 +62,9 @@ void _drawRotaPrimeStopPin(
   required String label,
   required bool selected,
   required bool compact,
+  required MapPinDeliveryState deliveryState,
 }) {
-  final fill = selected ? AppColors.orange : const Color(0xFF5C5C66);
+  final fill = mapPinFillColor(deliveryState, selected: selected);
   final headR = size.width * 0.38;
   final headCenter = Offset(size.width / 2, headR + 2);
   final tipY = size.height - 1;
@@ -106,18 +111,62 @@ void _drawRotaPrimeStopPin(
     );
   }
 
-  final tp = TextPainter(
-    text: TextSpan(
-      text: label,
-      style: TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w800,
-        fontSize: compact ? 10 : (label.length > 2 ? 11 : 13),
-      ),
-    ),
-    textDirection: TextDirection.ltr,
-  )..layout(maxWidth: headR * 1.6);
-  tp.paint(canvas, headCenter - Offset(tp.width / 2, tp.height / 2));
+  switch (deliveryState) {
+    case MapPinDeliveryState.delivered:
+      _drawPinGlyph(canvas, headCenter, headR, _PinGlyph.check, compact);
+    case MapPinDeliveryState.failed:
+      _drawPinGlyph(canvas, headCenter, headR, _PinGlyph.close, compact);
+    case MapPinDeliveryState.pending:
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: compact ? 10 : (label.length > 2 ? 11 : 13),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: headR * 1.6);
+      tp.paint(canvas, headCenter - Offset(tp.width / 2, tp.height / 2));
+  }
+}
+
+enum _PinGlyph { check, close }
+
+void _drawPinGlyph(
+  Canvas canvas,
+  Offset center,
+  double headR,
+  _PinGlyph glyph,
+  bool compact,
+) {
+  final s = headR * (compact ? 0.55 : 0.62);
+  final paint = Paint()
+    ..color = Colors.white
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = compact ? 2.2 : 2.8
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+
+  if (glyph == _PinGlyph.check) {
+    final path = Path()
+      ..moveTo(center.dx - s * 0.55, center.dy + s * 0.05)
+      ..lineTo(center.dx - s * 0.08, center.dy + s * 0.5)
+      ..lineTo(center.dx + s * 0.62, center.dy - s * 0.45);
+    canvas.drawPath(path, paint);
+  } else {
+    canvas.drawLine(
+      Offset(center.dx - s * 0.45, center.dy - s * 0.45),
+      Offset(center.dx + s * 0.45, center.dy + s * 0.45),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx + s * 0.45, center.dy - s * 0.45),
+      Offset(center.dx - s * 0.45, center.dy + s * 0.45),
+      paint,
+    );
+  }
 }
 
 void _drawRotaPrimeDriverArrow(Canvas canvas, Size size, {required bool bold}) {
@@ -162,5 +211,4 @@ void _drawRotaPrimeDriverArrow(Canvas canvas, Size size, {required bool bold}) {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2,
   );
-
 }

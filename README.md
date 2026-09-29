@@ -2,9 +2,9 @@
 
 Aplicativo Android para **planejamento e execução de rotas de entrega**, pensado para entregadores que trabalham com romaneios (planilhas XLSX), paradas manuais e navegação assistida no mapa.
 
-**Versão atual:** `1.2.8+39` (ver `pubspec.yaml`)
+**Versão atual:** `1.2.9+40` (ver `pubspec.yaml`)
 
-> **Download oficial (clientes):** [github.com/ALN2025/rotaprime](https://github.com/ALN2025/rotaprime) · **[Baixar APK (Release)](https://github.com/ALN2025/rotaprime/releases/latest)** · [Link direto v1.2.8](https://github.com/ALN2025/rotaprime/releases/download/v1.2.8/ROTA_PRIME.apk)  
+> **Download oficial (clientes):** [github.com/ALN2025/rotaprime](https://github.com/ALN2025/rotaprime) · **[Baixar APK (Release)](https://github.com/ALN2025/rotaprime/releases/latest)** · [Link direto v1.2.9](https://github.com/ALN2025/rotaprime/releases/download/v1.2.9/ROTA_PRIME.apk)  
 > README para entregadores no repositório: compara **Grátis** vs **PRO** com ícones. Guia detalhado: **[GUIA-USUARIO.md](GUIA-USUARIO.md)**.
 
 ---

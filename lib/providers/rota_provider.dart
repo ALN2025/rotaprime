@@ -27,6 +27,12 @@ import 'package:rota_prime/utils/import_parada_dedupe.dart';
 import 'package:rota_prime/utils/romaneio_import_registry.dart';
 import 'package:rota_prime/utils/manifest_route_order.dart';
 import 'package:rota_prime/utils/navigation_parada_utils.dart';
+import 'package:rota_prime/utils/parada_scan_match.dart';
+import 'package:rota_prime/utils/qr_parada_fields.dart';
+import 'package:rota_prime/utils/qr_carrier_infer.dart';
+import 'package:rota_prime/utils/romaneio_package_order.dart';
+import 'package:rota_prime/models/romaneio_carrier.dart';
+import 'package:rota_prime/utils/scan_payload_parse.dart';
 import 'package:rota_prime/utils/route_delivery_stats.dart';
 import 'package:rota_prime/utils/stop_route_order.dart';
 import 'package:rota_prime/utils/navigation_route_leg.dart';
@@ -140,6 +146,9 @@ class RotaState {
 
   bool get allowManualParadaEntry => !isSpreadsheetImportedRoute;
 
+  bool canEditParada(Parada p) =>
+      allowManualParadaEntry || QrParadaFields.isQrParada(p);
+
   RotaState copyWith({
     int? rotaId,
     List<Parada>? paradas,
@@ -228,6 +237,11 @@ class RotaNotifier extends StateNotifier<RotaState> {
   /// Plano já veio do boot; evita rede extra no meio da importação (travava a UI).
   Future<bool> _ensureProEntitlementsLoaded() async {
     return _ref.read(subscriptionProvider).isPro;
+  }
+
+  void clearImportStatusMessage() {
+    _lastImportStatusUi = null;
+    state = state.copyWith(statusMessage: '');
   }
 
   void _setImportStatus(String message) {
@@ -1390,9 +1404,11 @@ class RotaNotifier extends StateNotifier<RotaState> {
     }
     if (trackingCode != null) {
       parada.spxTn = trackingCode;
-      parada.rawLine = trackingCode.isEmpty
-          ? address
-          : '-; -; $trackingCode; $address;';
+      if (!QrParadaFields.isQrParada(parada)) {
+        parada.rawLine = trackingCode.isEmpty
+            ? address
+            : '-; -; $trackingCode; $address;';
+      }
     }
     if (clearBagOrder) {
       parada
@@ -1599,7 +1615,79 @@ class RotaNotifier extends StateNotifier<RotaState> {
     return true;
   }
 
-  Future<Parada?> addParadaFromQr(String spx, String endereco) async {
+  void _applyQrCarrierToParada(
+    Parada p,
+    String trackingCode, {
+    String? bagOrder,
+    String? deliveryRef,
+  }) {
+    final carrier = QrCarrierInfer.resolve(
+      trackingCode: trackingCode,
+      routeParadas: state.paradas.where((x) => x.id != p.id).toList(),
+    );
+    p.romaneioCarrier = carrier;
+    p.romaneioLayout = QrCarrierInfer.layoutFor(carrier);
+    if (carrier == RomaneioCarrier.shopee) {
+      final bag = parseManualBagOrder(bagOrder ?? '');
+      if (bag.sequence != null && bag.sequence! > 0) {
+        p.sequence = bag.sequence!;
+      }
+      if (bag.displayLabel.isNotEmpty) {
+        p.packageOrderLabel = bag.displayLabel;
+      }
+      p.spxTn = trackingCode;
+    } else if (carrier == RomaneioCarrier.magalog ||
+        carrier == RomaneioCarrier.loggi) {
+      final ref = (deliveryRef ?? '').trim();
+      p.spxTn = ref.isNotEmpty ? ref : trackingCode;
+    }
+  }
+
+  Future<Parada?> updateQrParadaDetails({
+    required int paradaId,
+    required String trackingCode,
+    required String address,
+    String recipientName = '',
+    String bagOrder = '',
+    String deliveryRef = '',
+  }) async {
+    final parada = await updateParadaManual(
+      paradaId: paradaId,
+      address: address,
+      trackingCode: trackingCode,
+    );
+    if (parada == null) return null;
+    final idx = state.paradas.indexWhere((p) => p.id == paradaId);
+    if (idx < 0) return parada;
+    final p = state.paradas[idx];
+    _applyQrCarrierToParada(
+      p,
+      trackingCode,
+      bagOrder: bagOrder,
+      deliveryRef: deliveryRef,
+    );
+    p.rawLine = QrParadaFields.format(
+      code: trackingCode,
+      recipientName: recipientName,
+      address: address,
+    );
+    final isar = await IsarService.instance;
+    await isar.writeTxn(() async {
+      await isar.paradas.put(p);
+    });
+    final list = [...state.paradas];
+    list[idx] = p;
+    state = state.copyWith(paradas: list, statusMessage: '');
+    await focusParadaAfterQrScan(paradaId);
+    return p;
+  }
+
+  Future<Parada?> addParadaFromQr(
+    String spx,
+    String endereco, {
+    bool geocodeAddress = true,
+    String recipientName = '',
+  }) async {
     if (state.rotaId == null) {
       await ensureEmptyDraftRota();
     }
@@ -1607,25 +1695,49 @@ class RotaNotifier extends StateNotifier<RotaState> {
     final rotaId = state.rotaId;
     if (rotaId == null) return null;
 
-    state = state.copyWith(statusMessage: 'Localizando endereço…');
-    final g = await _geocode.geocode(
-      endereco,
-      allowFallback: false,
-      cityHint: inferCityFromAddress(endereco),
-    );
-    final cityField = inferCityFromAddress(endereco);
+    final addr = endereco.trim();
+    final displayAddr =
+        isTrackingOnlyText(addr) ? '' : addr;
+    final shouldGeocode =
+        geocodeAddress && displayAddr.isNotEmpty && !isTrackingOnlyText(displayAddr);
+    var g = GeocodeResult.fallback();
+    if (shouldGeocode) {
+      state = state.copyWith(statusMessage: 'Localizando endereço…');
+      g = await _geocode.geocode(
+        displayAddr,
+        allowFallback: false,
+        cityHint: inferCityFromAddress(displayAddr),
+      );
+    }
+    final cityField = inferCityFromAddress(displayAddr);
+    final ordem = state.paradas.length + 1;
     final parada = Parada()
       ..rotaId = rotaId
       ..spxTn = spx
-      ..destinationAddress = endereco
+      ..destinationAddress =
+          displayAddr.isNotEmpty ? displayAddr : (cityField.isNotEmpty ? cityField : spx)
       ..city = cityField
       ..latitude = g.found ? g.lat : null
       ..longitude = g.found ? g.lng : null
-      ..rawLine = '-; -; $spx; $endereco;'
-      ..ordemExibicao = state.paradas.length + 1
-      ..sequence = state.paradas.length + 1
-      ..stop = state.paradas.length + 1
+      ..rawLine = QrParadaFields.format(
+        code: spx,
+        recipientName: recipientName,
+        address: displayAddr.isNotEmpty ? displayAddr : '',
+      )
+      ..ordemExibicao = ordem
+      ..sequence = 0
+      ..stop = ordem
       ..romaneioLayout = state.rota?.romaneioLayout ?? ImportRomaneioLayout.padrao;
+
+    _applyQrCarrierToParada(parada, spx);
+
+    if (parada.latitude == null || parada.longitude == null) {
+      final fallback = _fallbackPinForQrParada(ordem);
+      if (fallback != null) {
+        parada.latitude = fallback.latitude;
+        parada.longitude = fallback.longitude;
+      }
+    }
 
     await isar.writeTxn(() async {
       await isar.paradas.put(parada);
@@ -1636,7 +1748,15 @@ class RotaNotifier extends StateNotifier<RotaState> {
       pacotesEscaneados: state.pacotesEscaneados + 1,
       statusMessage: '',
     );
+    await focusParadaAfterQrScan(parada.id);
     return parada;
+  }
+
+  /// Alvo no mapa + tarja laranja (GPS → parada) após escanear.
+  Future<void> focusParadaAfterQrScan(int paradaId) async {
+    await refreshDriverLocation();
+    await syncActiveNavigationTarget(manualParadaId: paradaId);
+    await refreshNavigationLegForActiveTarget(force: true);
   }
 
   Future<String?> findAddressForSpx(String spx) async {
@@ -1644,6 +1764,60 @@ class RotaNotifier extends StateNotifier<RotaState> {
     final all = await isar.paradas.filter().spxTnEqualTo(spx).findAll();
     if (all.isEmpty) return null;
     return all.first.destinationAddress;
+  }
+
+  /// Endereço para geocodificar ao escanear (romaneio, histórico ou texto do QR).
+  Future<({String displayAddress, String? geocodeQuery})> resolveAddressForScanCode(
+    String code,
+    String rawScan,
+  ) async {
+    final fromPayload = extractAddressFromScanRaw(rawScan);
+    if (fromPayload != null && fromPayload.trim().isNotEmpty) {
+      return (displayAddress: fromPayload.trim(), geocodeQuery: fromPayload.trim());
+    }
+
+    final match = findParadaForScanCode(state.paradas, rawScan);
+    final fromMatch = match != null ? realAddressFromParada(match) : null;
+    if (fromMatch != null) {
+      return (displayAddress: fromMatch, geocodeQuery: fromMatch);
+    }
+
+    final fromDb = await findAddressForSpx(code);
+    if (fromDb != null && fromDb.trim().isNotEmpty && !isTrackingOnlyText(fromDb)) {
+      return (displayAddress: fromDb.trim(), geocodeQuery: fromDb.trim());
+    }
+
+    for (final p in state.paradas) {
+      if (!paradaContainsScanCode(p, code)) continue;
+      final addr = realAddressFromParada(p);
+      if (addr != null) {
+        return (displayAddress: addr, geocodeQuery: addr);
+      }
+    }
+
+    return (displayAddress: code, geocodeQuery: null);
+  }
+
+  LatLng? _fallbackPinForQrParada(int ordemExibicao) {
+    final driver = state.driverPosition;
+    if (driver != null) {
+      final n = ordemExibicao.clamp(1, 99);
+      return LatLng(
+        driver.latitude + (n * 0.00008),
+        driver.longitude + (n * 0.00006),
+      );
+    }
+    final geocoded = state.paradas
+        .where((p) => p.latitude != null && p.longitude != null)
+        .toList();
+    if (geocoded.isEmpty) return null;
+    geocoded.sort((a, b) => b.ordemExibicao.compareTo(a.ordemExibicao));
+    final anchor = geocoded.first;
+    final n = ordemExibicao.clamp(1, 99);
+    return LatLng(
+      anchor.latitude! + (n * 0.00012),
+      anchor.longitude! + (n * 0.00009),
+    );
   }
 
   /// Próxima pendente: ordem da rota ou, se [preferNearest], a mais próxima do GPS.

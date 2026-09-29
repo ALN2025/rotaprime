@@ -113,6 +113,7 @@ class _RouteMapGoogleState extends State<RouteMapGoogle> {
           c.displayLabel,
           selected: _isSelected(p),
           compact: true,
+          deliveryState: pinStateForAddress(widget.paradas, p),
         );
         markers.add(
           gmaps.Marker(
@@ -142,6 +143,7 @@ class _RouteMapGoogleState extends State<RouteMapGoogle> {
           label,
           selected: _isSelected(p),
           compact: widget.lightweightMarkers,
+          deliveryState: pinStateForAddress(widget.paradas, p),
         );
         markers.add(
           gmaps.Marker(
