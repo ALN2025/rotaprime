@@ -1,11 +1,6 @@
 {
   "revoked_device_ids": [],
-  "licensed_pro_devices": {
-    "d6557bc9478339264ebe7b76": {
-      "source": "admin",
-      "registered_at": "2026-09-29T18:37:33.153Z"
-    }
-  },
+  "licensed_pro_devices": {},
   "trial_used_device_ids": [
     "5e54dade297890a55ca1f6c6",
     "735511f84367a75899af3598",
