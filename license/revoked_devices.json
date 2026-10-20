@@ -4,9 +4,7 @@
   "trial_used_device_ids": [
     "6fb9f3ac015c50f7"
   ],
-  "pro_until": {
-    "6fb9f3ac015c50f7": "2027-01-21T14:00:18.117Z"
-  },
+  "pro_until": {},
   "trial_until": {
     "6fb9f3ac015c50f7": "2026-10-27T14:01:12.711Z"
   }
