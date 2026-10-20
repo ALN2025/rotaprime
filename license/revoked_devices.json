@@ -4,5 +4,7 @@
   "trial_used_device_ids": [],
   "pro_until": {},
   "trial_until": {},
-  "developer_device_ids": []
+  "developer_device_ids": [
+    "6fb9f3ac015c50f7"
+  ]
 }
