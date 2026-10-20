@@ -2,5 +2,7 @@
   "revoked_device_ids": [],
   "licensed_pro_devices": {},
   "trial_used_device_ids": [],
-  "pro_until": {}
+  "pro_until": {
+    "rp-a-6fb9f3ac015c50f7": "2026-11-20T00:55:21.789Z"
+  }
 }
