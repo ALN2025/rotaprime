@@ -2,11 +2,13 @@
   "revoked_device_ids": [],
   "licensed_pro_devices": {},
   "trial_used_device_ids": [
+    "5e54dade297890a55ca1f6c6",
     "d468898b7e71212218001752"
   ],
   "pro_until": {},
   "trial_until": {
-    "d468898b7e71212218001752": "2026-10-28T19:27:03.931Z"
+    "d468898b7e71212218001752": "2026-10-28T19:27:03.931Z",
+    "5e54dade297890a55ca1f6c6": "2026-10-29T19:47:29.315Z"
   },
   "developer_device_ids": [
     "6fb9f3ac015c50f7"
