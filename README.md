@@ -1,180 +1,108 @@
 # ROTA PRIME
 
-Aplicativo Android para **planejamento e execução de rotas de entrega**, pensado para entregadores que trabalham com romaneios (planilhas XLSX), paradas manuais e navegação assistida no mapa.
+**Roteirizador SPX Brasil** — aplicativo Android para entregadores que trabalham com romaneio **Shopee / SPX** em todo o território nacional.
 
-**Versão atual:** `1.2.9+40` (ver `pubspec.yaml`)
-
-> **Download oficial (clientes):** [github.com/ALN2025/rotaprime](https://github.com/ALN2025/rotaprime) · **[Baixar APK (Release)](https://github.com/ALN2025/rotaprime/releases/latest)** · [Link direto v1.2.9](https://github.com/ALN2025/rotaprime/releases/download/v1.2.9/ROTA_PRIME.apk)  
-> README para entregadores no repositório: compara **Grátis** vs **PRO** com ícones. Guia detalhado: **[GUIA-USUARIO.md](GUIA-USUARIO.md)**.
+Desenvolvido por **[ALN System](https://github.com/ALN2025)**.
 
 ---
 
-## Visão geral
+## Download direto (Android)
 
-O ROTA PRIME reúne em um único fluxo:
+| Versão | APK | Tamanho aprox. |
+|--------|-----|----------------|
+| **2.0.0** (atual) | [**Baixar RotaPrime.apk**](https://github.com/ALN2025/rotaprime/releases/download/v2.0.0/RotaPrime.apk) | ~112 MB |
 
-- importação de pacotes a partir de **planilha XLSX** (formato compatível com romaneios Shopee);
-- **mapa interativo** com pins por endereço, progresso de entregas e GPS;
-- **modo entrega ativa** (entregue / não entregue, múltiplos pacotes no mesmo endereço);
-- planos **Grátis** e **PRO**, com otimização de rota e traçado pelas ruas apenas no PRO.
+> O link acima inicia o **download imediato** do instalador. Não é necessário fazer login no GitHub.
 
-Os dados ficam **no aparelho** (banco local Isar), com suporte a retomar rota ativa após fechar o app.
+**Todas as versões:** [Releases](https://github.com/ALN2025/rotaprime/releases)
+
+### Instalação rápida
+
+1. Baixe o `.apk` pelo link acima (ou pela página de Releases).
+2. Abra o arquivo no celular e confirme a instalação.
+3. Se o Android pedir, permita **instalar apps de fonte desconhecida** apenas para o app que você usou para abrir o arquivo (Chrome, Gerenciador de arquivos, etc.).
+4. Abra o **Rota Prime**, importe sua planilha do app SPX e siga a rota no mapa.
 
 ---
 
-## Planos Grátis e PRO
+## Para quem é
 
-| Recurso | Grátis | PRO |
-|--------|:------:|:---:|
-| Importar planilha XLSX | ✓ | ✓ |
-| Mapa, paradas e status de entrega | ✓ | ✓ |
-| Ordem igual à planilha / manual | ✓ | ✓ |
-| Parada manual (rua, nº, bairro, cidade) | ✓ | ✓ |
-| Editar endereço do pin (menu ⋮) | ✓ | ✓ |
-| CEP + número (ViaCEP) | — | ✓ |
-| Otimização OSRM + linha laranja no mapa | — | ✓ |
-| Tempo / distância estimados | — | ✓ |
-| Controle de gastos e lucro da rota | — | ✓ |
+- Entregadores **last mile** Shopee (SPX) no **Brasil inteiro** — São Paulo, Rio de Janeiro, Sul, Nordeste, Centro-Oeste e demais regiões.
+- Quem precisa **organizar paradas**, ver **pins no mapa** e acompanhar a rota com **GPS**, a partir do romaneio exportado do aplicativo SPX.
 
-Detalhes completos: tela **Comparar planos** dentro do app.
+---
 
-A licença PRO é vinculada ao **ID do aparelho** (Configurações → ID do aparelho). Geração de chaves: script `GERAR-LICENCA.bat` (uso interno / suporte).
+## Principais recursos
+
+- **Importação de romaneio** — planilha `.xlsx` ou `.csv` exportada do app SPX Shopee Brasil.
+- **Prévia inteligente** — quantidade de entregas e **cidade · UF** detectadas na planilha.
+- **Mapa com pins** — endereços geolocalizados (CEP e endereço em nível nacional).
+- **Lista e ordem do romaneio** — sequência / sacola alinhada à operação.
+- **GPS ao vivo** — posição do entregador no mapa durante a rota.
+- **Multitarefa** — minimizar o app e voltar sem perder o mapa e os pins (quando o aparelho permite).
+- **Suporte** — feedback e ajuda via WhatsApp em **Configurações** (dentro do app).
 
 ---
 
 ## Requisitos
 
-### Para usar o APK (entregador)
-
-- Android com permissões de **localização** e **internet** (mapa, geocodificação e, no PRO, OSRM).
-- Opcional: microfone (entrada por voz), câmera (QR de pacote).
-
-### Para compilar (desenvolvimento)
-
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) compatível com `sdk: ^3.12.2`
-- Android SDK / Android Studio (JDK embarcado)
-- `flutter` e `dart` no `PATH`
+| Item | Detalhe |
+|------|---------|
+| Sistema | Android 8.0 ou superior (recomendado) |
+| Hardware | GPS; espaço livre para instalação (~120 MB) |
+| Rede | Internet na importação para posicionar endereços no mapa |
+| Romaneio | Export SPX em `.xlsx` ou `.csv` |
 
 ---
 
-## Build do APK oficial
+## Como usar (fluxo resumido)
 
-Na raiz do projeto:
-
-```bat
-COMPILAR.APK.bat
-```
-
-O script executa, em sequência:
-
-1. `flutter pub get`
-2. `dart run build_runner build` (Isar)
-3. `flutter build apk --release` — **celular** (ARM) e **emulador** (x64)
-4. Cópia dos artefatos para:
-   - `release\ROTA_PRIME.apk` ← **celulares / distribuição / GitHub**
-   - `release\ROTA_PRIME_EMULADOR.apk` ← **emulador Android no PC** (demo-pc)
-   - Área de trabalho: `ROTA_PRIME.apk` e `ROTA_PRIME_EMULADOR.apk`
-
-Use **somente** `release\ROTA_PRIME.apk` para Telegram, USB e entregadores. Não envie o APK do emulador para celulares reais.
-
-Se o build falhar ou o APK ficar anormalmente pequeno, execute `REPARAR-GRADLE.bat` e compile novamente.
+1. **Importar** — escolha a planilha do dia no app SPX.
+2. **Conferir** — veja cidade, colunas e amostra de endereços na prévia.
+3. **Personalizar** — marque o que deseja ver ao chegar na entrega (telefone, AWB, etc.).
+4. **Iniciar rota** — mapa, lista e navegação conforme seu plano (Free / Pro).
 
 ---
 
-## Instalação no celular
+## Planos
 
-1. Instale `release\ROTA_PRIME.apk` (permitir “fontes desconhecidas” se necessário).
-2. Ou, com USB debugging e `adb` no PATH:
-
-   ```bat
-   INSTALAR-USB.bat
-   ```
+O app oferece uso **gratuito** com limites de pacotes e recursos avançados no **Plano Pro** (otimização de rota, mapa Google, etc.). Detalhes dentro do aplicativo em **Configurações → Planos**.
 
 ---
 
-## Desenvolvimento local
+## Privacidade e dados
 
-```bat
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs
-flutter run
-```
-
-Análise estática:
-
-```bat
-dart analyze
-flutter test
-```
-
-Após alterar modelos Isar (`lib/models/*.dart` com anotações `@collection`), regenere sempre com `build_runner`.
+O romaneio é processado no dispositivo para montar a rota. Consulte a **Política de privacidade** no menu do app. Não compartilhe planilhas com dados de clientes em canais públicos.
 
 ---
 
-## Estrutura do projeto (resumo)
+## Suporte e contato
 
-| Caminho | Descrição |
-|---------|-----------|
-| `lib/` | Código Flutter (telas, providers, serviços, widgets) |
-| `lib/providers/rota_provider.dart` | Estado da rota, otimização, navegação ativa |
-| `lib/services/` | Importação XLSX, geocodificação, OSRM, localização |
-| `lib/widgets/` | Mapa, folhas de parada, diálogos manual/editar |
-| `android/` | Projeto Android nativo |
-| `release/` | APK oficial gerado pelo script |
-| `demo-pc/` | Materiais auxiliares de demo (emulador / mock); não substituem o APK |
-| `tools/` | Scripts de verificação do APK |
+- **No app:** Configurações → **Enviar feedback no WhatsApp** (ALN System).
+- **Repositório:** [github.com/ALN2025/rotaprime](https://github.com/ALN2025/rotaprime)
+- **Problemas conhecidos / novidades:** aba [Releases](https://github.com/ALN2025/rotaprime/releases)
 
 ---
 
-## Stack técnica
+## Changelog (2.0.0)
 
-- **Flutter** + **Riverpod** (estado)
-- **Isar** (persistência local)
-- **flutter_map** + **latlong2** (mapa)
-- **OSRM** (otimização e trechos PRO)
-- **Nominatim / Photon** (geocodificação de endereços manuais)
-- **ViaCEP** (entrada por CEP no PRO)
-- **geolocator**, **mobile_scanner**, **speech_to_text**, entre outros (ver `pubspec.yaml`)
+- Foco em **romaneio Shopee Brasil** (planilha SPX).
+- Nova identidade visual: **Roteirizador SPX Brasil**.
+- Geocodificação e prévia por **cidade/UF** em qualquer estado.
+- Estabilidade do **mapa ao retornar** de outros aplicativos.
+- Melhorias no canal de **suporte WhatsApp**.
 
----
-
-## Fluxo típico do entregador
-
-1. **Importar** romaneio XLSX ou **criar rota manual** (Grátis: rua, número, bairro e cidade).
-2. Revisar paradas no **mapa**; corrigir endereço pelo menu **⋮ → Editar endereço** se necessário.
-3. **PRO:** otimizar rota → traçado laranja e ordem sugerida pelo menor caminho.
-4. **Iniciar rota** → modo entrega ativa (Grátis: ordem da planilha; PRO otimizado: pin mais próximo + recálculo ao desviar).
-5. Marcar **Entregue** / **Não entregue**; app prioriza outros pacotes no **mesmo endereço** quando aplicável.
-6. **Finalizar** rota e consultar histórico / gastos (PRO).
+Versões anteriores: [Releases](https://github.com/ALN2025/rotaprime/releases).
 
 ---
 
-## Scripts úteis (Windows)
+## Desenvolvimento
 
-| Script | Função |
-|--------|--------|
-| `COMPILAR.APK.bat` | Gera o APK release oficial |
-| `INSTALAR-USB.bat` | Instala o APK via ADB |
-| `GERAR-LICENCA.bat` | Gera licença PRO (suporte) |
-| `REPARAR-GRADLE.bat` | Repara cache Gradle em falhas de build |
+O código-fonte do produto pode ser mantido em repositório separado ou atualizado conforme a política ALN System. Este repositório público concentra **distribuição do APK** e documentação para entregadores.
 
 ---
 
-## Privacidade e rede
-
-- Endereços digitados ou importados são usados para exibição no mapa e, quando online, enviados a serviços de **geocodificação** e **roteamento** (OpenStreetMap / OSRM / APIs públicas configuradas no app).
-- Não commitar credenciais, `.env` ou chaves de licença no repositório.
-
-Documentos legais: telas **Termos** / **Privacidade** no aplicativo.
-
----
-
-## Suporte
-
-Canal de suporte conforme a distribuição do APK (DEV ALN). Para PRO, informe o **ID do aparelho** copiado nas configurações do app.
-
----
-
-## Licença do projeto
-
-Software proprietário. Uso, distribuição e modificação conforme contrato ou autorização do titular (DEV ALN / ROTA PRIME).
+<p align="center">
+  <strong>ROTA PRIME</strong> · Roteirizador SPX Brasil<br>
+  <sub>ALN System © 2025–2026</sub>
+</p>
